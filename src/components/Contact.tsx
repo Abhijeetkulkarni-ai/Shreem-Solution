@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-
+import { supabase } from "../lib/supabase";
 import {
   ArrowUpRight,
   Mail,
@@ -40,7 +40,8 @@ export default function Contact() {
   const [showForm, setShowForm] = useState<boolean>(false);
 
   const phoneLink = company.phone.primary.replace(/[^\d+]/g, "");
-
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const fullAddress = [
     company.address.line1,
     company.address.line2,
@@ -65,28 +66,46 @@ export default function Contact() {
     }));
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
+  const handleSubmit = async (
+    e: FormEvent<HTMLFormElement>
+  ): Promise<void> => {
     e.preventDefault();
 
-    const subject = encodeURIComponent(
-      `Business Inquiry — ${formData.inquiry}`
-    );
+    if (submitting) return;
 
-    const body = encodeURIComponent(
-      `Name: ${formData.name}
-Email: ${formData.email}
-Company: ${formData.company}
-Phone: ${formData.phone}
-Inquiry: ${formData.inquiry}
+    setSubmitting(true);
+    setSubmitError("");
 
-Message:
-${formData.message}`
-    );
+    try {
+      const { error } = await supabase.from("leads").insert({
+        company_name:
+          formData.company.trim() || "Individual / Not provided",
 
-    window.location.href =
-      `mailto:${company.email.primary}?subject=${subject}&body=${body}`;
+        contact_name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || null,
 
-    setSubmitted(true);
+        product_interest: formData.inquiry,
+        notes: formData.message.trim(),
+
+        source: "website",
+        status: "new",
+        priority: "normal",
+      });
+
+      if (error) throw error;
+
+      setSubmitted(true);
+      setFormData(initialFormData);
+    } catch (error) {
+      console.error("Contact form submission error:", error);
+
+      setSubmitError(
+        "We couldn't submit your inquiry. Please try again or contact us directly by email."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const closeForm = (): void => {
@@ -133,9 +152,8 @@ ${formData.message}`
 
       {/* CONTACT LAYOUT */}
       <div
-        className={`contact-layout ${
-          showForm ? "form-open" : "form-closed"
-        }`}
+        className={`contact-layout ${showForm ? "form-open" : "form-closed"
+          }`}
       >
 
         {/* CONTACT INFORMATION */}
@@ -254,7 +272,28 @@ ${formData.message}`
               <div className="contact-success">
                 <CheckCircle2 size={40} />
 
-                <h3>Your message is ready!</h3>
+                <div className="contact-success">
+                  <CheckCircle2 size={40} />
+
+                  <h3>Thank you for reaching out!</h3>
+
+                  <p>
+                    Your inquiry has been successfully submitted.
+                    Our team will review your requirements and get
+                    back to you shortly.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmitted(false);
+                      setShowForm(false);
+                    }}
+                  >
+                    DONE
+                    <ArrowUpRight size={16} />
+                  </button>
+                </div>
 
                 <p>
                   Your email application should open with
@@ -393,7 +432,11 @@ ${formData.message}`
                     required
                   />
                 </div>
-
+                {submitError && (
+                  <p className="contact-submit-error" role="alert">
+                    {submitError}
+                  </p>
+                )}
                 {/* FORM FOOTER */}
                 <div className="contact-form-footer">
                   <p>
@@ -404,9 +447,11 @@ ${formData.message}`
                   <button
                     type="submit"
                     className="contact-submit"
+                    disabled={submitting}
                   >
-                    SEND INQUIRY
-                    <Send size={15} />
+                    {submitting ? "SUBMITTING..." : "SEND INQUIRY"}
+
+                    {!submitting && <Send size={15} />}
                   </button>
                 </div>
 
