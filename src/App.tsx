@@ -7,8 +7,10 @@ import Services from "./components/Services";
 import Products from "./components/Products";
 import GlobalNetwork from "./components/GlobalNetwork";
 import OurCommitment from "./components/OurCommitment"
-import Contact from "./components/Contact"
-;
+import Testimonials from "./components/Testimonials";
+import FAQ from "./components/FAQ";
+import Contact from "./components/Contact";
+import Footer from "./components/Footer";
 
 function App() {
   return (
@@ -23,8 +25,11 @@ function App() {
         <Products />
         <GlobalNetwork />
         <OurCommitment />
+        <Testimonials />
+        <FAQ />
         <Contact />
       </main>
+      <Footer />
     </>
   );
 }

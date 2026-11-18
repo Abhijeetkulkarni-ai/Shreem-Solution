@@ -9,7 +9,17 @@ import {
 export default function Hero() {
   return (
     <section className="hero" id="home">
-      <div className="hero-image" />
+      <video
+        className="hero-video"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        poster="/images/hero-poster.jpg"
+      >
+        <source src="/videos/global-trade.mp4" type="video/mp4" />
+      </video>
 
       <div className="hero-content">
         <p className="eyebrow hero-eyebrow">
