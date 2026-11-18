@@ -10,18 +10,21 @@ import {
 import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 
-import { ShieldCheck, Globe2  } from "lucide-react";
+import { ShieldCheck, Globe2 } from "lucide-react";
+
 import { supabase } from "./lib/supabase";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
+
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
-
-import "./index.css";
 import Leads from "./pages/Leads";
 import Blogs from "./pages/Blogs";
 import Setting from "./pages/Setting";
 import Analytics from "./pages/Analytics";
+import UserManagement from "./pages/UserManagement";
+
+import "./index.css";
 
 type Profile = {
   full_name: string | null;
@@ -97,7 +100,11 @@ function Login() {
 
           {error && <p className="form-error">{error}</p>}
 
-          <button className="login-button" type="submit" disabled={loading}>
+          <button
+            className="login-button"
+            type="submit"
+            disabled={loading}
+          >
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
@@ -219,7 +226,9 @@ function AdminWorkspace({
     return (
       <div className="access-denied">
         <h1>Access restricted</h1>
-        <p>Your account does not have permission to access this workspace.</p>
+        <p>
+          Your account does not have permission to access this workspace.
+        </p>
         <button onClick={onLogout}>Sign Out</button>
       </div>
     );
@@ -229,10 +238,10 @@ function AdminWorkspace({
     "/": "Dashboard",
     "/products": "Products",
     "/leads": "Leads & CRM",
-    "/enquiries": "Enquiries",
     "/blogs": "Blog Management",
     "/analytics": "Analytics",
     "/settings": "Website Settings",
+    "/users": "User Management",
   };
 
   return (
@@ -249,6 +258,7 @@ function AdminWorkspace({
         <Sidebar
           onLogout={onLogout}
           onClose={() => setMobileOpen(false)}
+          role={profile.role}
         />
       </div>
 
@@ -264,16 +274,24 @@ function AdminWorkspace({
         <div className="page-content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route
-              path="*"
-              element={<Navigate to="/" replace />}
-            />
             <Route path="/products" element={<Products />} />
             <Route path="/leads" element={<Leads />} />
-            {/* <Route path="/enquiries" element={<Enquiries />} /> */}
-              <Route path="/blogs" element={<Blogs />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/settings" element={<Setting />} />
+            <Route path="/blogs" element={<Blogs />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/settings" element={<Setting />} />
+
+            <Route
+              path="/users"
+              element={
+                profile.role === "super_admin" ? (
+                  <UserManagement />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </main>

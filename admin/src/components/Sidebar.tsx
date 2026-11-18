@@ -8,9 +8,18 @@ import {
   Settings,
   LogOut,
   X,
+  Globe2,
+  ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 
 import { NavLink } from "react-router-dom";
+
+type SidebarProps = {
+  onLogout: () => void;
+  onClose?: () => void;
+  role: string;
+};
 
 const navigation = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
@@ -21,12 +30,24 @@ const navigation = [
   { name: "Website Settings", path: "/settings", icon: Settings },
 ];
 
-type SidebarProps = {
-  onLogout: () => void;
-  onClose?: () => void;
-};
+export default function Sidebar({
+  onLogout,
+  onClose,
+  role,
+}: SidebarProps) {
+  const visibleNavigation = [
+    ...navigation,
+    ...(role === "super_admin"
+      ? [
+          {
+            name: "User Management",
+            path: "/users",
+            icon: ShieldCheck,
+          },
+        ]
+      : []),
+  ];
 
-export default function Sidebar({ onLogout, onClose }: SidebarProps) {
   return (
     <>
       <div className="sidebar-brand">
@@ -52,7 +73,7 @@ export default function Sidebar({ onLogout, onClose }: SidebarProps) {
       <div className="workspace-label">WORKSPACE</div>
 
       <nav className="side-navigation">
-        {navigation.map(({ name, path, icon: Icon }) => (
+        {visibleNavigation.map(({ name, path, icon: Icon }) => (
           <NavLink
             key={path}
             to={path}
@@ -62,15 +83,27 @@ export default function Sidebar({ onLogout, onClose }: SidebarProps) {
             }
             onClick={onClose}
           >
-            <Icon size={18} />
+            <Icon size={18} strokeWidth={1.8} />
             <span>{name}</span>
           </NavLink>
         ))}
       </nav>
 
       <div className="sidebar-bottom">
+        <a
+          href="https://shreemsolution.co.in"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="sidebar-website-link"
+        >
+          <Globe2 size={17} />
+          <span>Visit Public Website</span>
+          <ExternalLink size={14} />
+        </a>
+
         <div className="sidebar-status">
           <span className="status-dot" />
+
           <div>
             <strong>System Operational</strong>
             <span>Admin workspace</span>

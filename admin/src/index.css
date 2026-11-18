@@ -3137,3 +3137,75 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+
+.sidebar-website-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 16px;
+  color: #0e6b66;
+  background: #eaf2ef;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+
+.sidebar-website-link:hover {
+  background: #dcebe6;
+}
+
+.sidebar-website-link svg:last-child {
+  margin-left: auto;
+}
+
+
+/* SIDEBAR BRAND TYPOGRAPHY FIX */
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 18px;
+}
+
+.sidebar-brand .brand-symbol {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-brand > div:not(.brand-symbol) {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.sidebar-brand strong {
+  display: block;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 1.1px;
+  font-weight: 800;
+  color: #171916;
+}
+
+.sidebar-brand span {
+  display: block;
+  white-space: nowrap;
+  font-size: 8px;
+  line-height: 1.4;
+  letter-spacing: 1.5px;
+  font-weight: 500;
+  color: #858b86;
+}
