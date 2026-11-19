@@ -75,12 +75,9 @@ export async function cachedFetch<T>(
   const version = getVersion(storageKey);
 
   // 4. Fetch fresh data
-  let request: Promise<T>;
-
-  request = (async () => {
-    try {
-      const data = await fetcher();
-
+  const request: Promise<T> = Promise.resolve()
+    .then(() => fetcher())
+    .then((data) => {
       // Cache only if request was not invalidated
       if (getVersion(storageKey) === version) {
         const entry: CacheEntry<T> = {
@@ -101,12 +98,13 @@ export async function cachedFetch<T>(
       }
 
       return data;
-    } finally {
+    })
+    .finally(() => {
+      // Delete only if this is still the active request
       if (pendingRequests.get(storageKey) === request) {
         pendingRequests.delete(storageKey);
       }
-    }
-  })();
+    });
 
   pendingRequests.set(storageKey, request);
 
@@ -122,6 +120,7 @@ export function invalidateCache(key: string) {
 
   bumpVersion(storageKey);
   memoryCache.delete(storageKey);
+  pendingRequests.delete(storageKey);
 
   try {
     localStorage.removeItem(storageKey);
@@ -147,6 +146,7 @@ export function invalidateCacheGroup(group: string) {
     if (key.startsWith(storagePrefix)) {
       bumpVersion(key);
       memoryCache.delete(key);
+      pendingRequests.delete(key);
     }
   }
 
@@ -179,6 +179,7 @@ export function clearCache() {
   }
 
   memoryCache.clear();
+  pendingRequests.clear();
 
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
