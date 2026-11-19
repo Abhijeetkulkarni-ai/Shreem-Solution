@@ -5,6 +5,7 @@ import {
   Globe2,
   Mail,
   Phone,
+  Ship,
 } from "lucide-react";
 
 import { company } from "../data/company";
@@ -43,7 +44,6 @@ export default function Footer() {
   return (
     <footer className="footer" id="footer">
       <div className="footer-main">
-
         {/* Brand section */}
         <div className="footer-brand">
           <a href="#home" className="footer-logo">
@@ -136,10 +136,15 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Large brand statement */}
+      {/* Brand statement */}
       <div className="footer-marquee">
-        <span>{company.tagline.toUpperCase()}</span>
-        <span className="footer-marquee-dot">✳</span>
+        <span className="footer-marquee-watermark" aria-hidden="true">
+          {company.tagline.toUpperCase()}
+        </span>
+
+        <span className="footer-marquee-dot">
+          <Ship size={64} strokeWidth={1.5} />
+        </span>
       </div>
 
       {/* Bottom bar */}
@@ -156,6 +161,20 @@ export default function Footer() {
         <a href="#home" className="footer-back-top">
           BACK TO TOP
           <ArrowUpRight size={15} />
+        </a>
+      </div>
+
+      {/* Developer credit */}
+      <div className="footer-credit">
+        <span>Designed &amp; Developed by</span>
+
+        <a
+          href="https://creonox.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Creonox Technologies
+          <ArrowUpRight size={12} />
         </a>
       </div>
     </footer>

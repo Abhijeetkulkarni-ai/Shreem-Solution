@@ -525,7 +525,7 @@ export default function UserManagement() {
                 <span className="um-eyebrow">TEAM ACCESS</span>
                 <h2>Invite a team member</h2>
                 <p>
-                  Send an invitation to join Shreem Solutions.
+                  Send an invitation to join SHREEM SOLUTION.
                 </p>
               </div>
 

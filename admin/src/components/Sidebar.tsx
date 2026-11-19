@@ -54,7 +54,7 @@ export default function Sidebar({
         <div className="brand-symbol">S</div>
 
         <div>
-          <strong>SHREEM SOLUTIONS</strong>
+          <strong>SHREEM SOLUTION</strong>
           <span>GLOBAL TRADE PARTNER</span>
         </div>
 

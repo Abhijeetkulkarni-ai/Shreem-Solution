@@ -1,10 +1,20 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CalendarDays } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  RefreshCw,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
 import { supabase } from "../lib/supabase";
+import {
+  cachedFetch,
+  CACHE_KEYS,
+  invalidateCache,
+} from "../lib/cache";
 
 type BlogArticle = {
   id: string;
@@ -21,18 +31,22 @@ type BlogArticle = {
   } | null;
 };
 
+const BLOG_POST_CACHE_TTL = 5 * 60 * 1000;
+
 export default function BlogPost() {
-  const { slug } = useParams();
+  const { slug } = useParams<{ slug: string }>();
 
   const [post, setPost] = useState<BlogArticle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let active = true;
 
     const fetchPost = async () => {
       if (!slug) {
+        setPost(null);
         setError("Article not found.");
         setLoading(false);
         return;
@@ -42,46 +56,69 @@ export default function BlogPost() {
       setError("");
       setPost(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("blog_posts")
-        .select(`
-          id,
-          title,
-          slug,
-          excerpt,
-          content,
-          featured_image_url,
-          published_at,
-          tags,
-          category:blog_categories (
-            name,
-            slug
-          )
-        `)
-        .eq("slug", slug)
-        .eq("status", "published")
-        .maybeSingle();
+      try {
+        const article = await cachedFetch<BlogArticle | null>(
+          `${CACHE_KEYS.blogDetails}${slug}`,
+          async () => {
+            const { data, error: fetchError } = await supabase
+              .from("blog_posts")
+              .select(`
+                id,
+                title,
+                slug,
+                excerpt,
+                content,
+                featured_image_url,
+                published_at,
+                tags,
+                category:blog_categories (
+                  name,
+                  slug
+                )
+              `)
+              .eq("slug", slug)
+              .eq("status", "published")
+              .maybeSingle();
 
-      if (!active) return;
+            if (fetchError) {
+              throw fetchError;
+            }
 
-      if (fetchError) {
+            if (!data) {
+              return null;
+            }
+
+            const category = Array.isArray(data.category)
+              ? data.category[0] ?? null
+              : data.category;
+
+            return {
+              ...data,
+              category,
+              tags: data.tags ?? [],
+            } as BlogArticle;
+          },
+          BLOG_POST_CACHE_TTL
+        );
+
+        if (!active) return;
+
+        if (!article) {
+          setError("This article could not be found.");
+        } else {
+          setPost(article);
+        }
+      } catch (fetchError) {
         console.error("Blog fetch error:", fetchError);
-        setError("Unable to load this article.");
-      } else if (!data) {
-        setError("This article could not be found.");
-      } else {
-        const category = Array.isArray(data.category)
-          ? data.category[0] ?? null
-          : data.category;
 
-        setPost({
-          ...data,
-          category,
-          tags: data.tags ?? [],
-        } as BlogArticle);
+        if (active) {
+          setError("Unable to load this article.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     };
 
     fetchPost();
@@ -89,7 +126,15 @@ export default function BlogPost() {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, retryCount]);
+
+  const handleRetry = () => {
+    if (slug) {
+      invalidateCache(`${CACHE_KEYS.blogDetails}${slug}`);
+    }
+
+    setRetryCount((count) => count + 1);
+  };
 
   const formatDate = (date: string | null) => {
     if (!date) return "Recently published";
@@ -119,15 +164,27 @@ export default function BlogPost() {
         {!loading && error && (
           <div className="blog-message">
             <h2>{error}</h2>
-            <Link to="/blog">Return to the journal</Link>
+
+            {error === "Unable to load this article." && (
+              <button
+                type="button"
+                className="blog-back-link"
+                onClick={handleRetry}
+              >
+                <RefreshCw size={16} />
+                Try again
+              </button>
+            )}
+
+            <Link to="/blog">
+              Return to the journal
+            </Link>
           </div>
         )}
 
         {!loading && post && (
           <article>
-
             <header className="blog-article-header">
-
               <div className="blog-post-meta">
                 <span>
                   {post.category?.name ?? "Global Trade"}
@@ -148,7 +205,6 @@ export default function BlogPost() {
                   {post.excerpt}
                 </p>
               )}
-
             </header>
 
             {post.featured_image_url && (
@@ -195,7 +251,6 @@ export default function BlogPost() {
                 <ArrowLeft size={16} />
               </Link>
             </div>
-
           </article>
         )}
 

@@ -12,16 +12,19 @@ import {
   Star,
   RefreshCw,
   Eye,
-
   ChevronDown,
+  Tags,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { invalidateCacheGroup } from "../lib/cache";
 
 type ProductStatus = "draft" | "published" | "archived";
 
 type Category = {
   id: string;
   name: string;
+  slug: string;
+  description: string | null;
   is_active: boolean;
   sort_order: number;
 };
@@ -76,6 +79,14 @@ const emptyForm = {
   seo_description: "",
 };
 
+const emptyCategoryForm = {
+  name: "",
+  slug: "",
+  description: "",
+  sort_order: 0,
+  is_active: true,
+};
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -95,80 +106,139 @@ export default function Products() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
   const [form, setForm] = useState(emptyForm);
+
   const [specifications, setSpecifications] = useState<
     { key: string; value: string }[]
   >([{ key: "", value: "" }]);
+
   const [existingImages, setExistingImages] = useState<ProductImage[]>([]);
-  const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
+  const [removedImages, setRemovedImages] = useState<ProductImage[]>([]);
   const [newImages, setNewImages] = useState<NewImage[]>([]);
   const [featuredImageKey, setFeaturedImageKey] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep track of preview URLs independently of React state.
+  const previewUrlsRef = useRef<string[]>([]);
+
+  // Category management state
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
+
+  // --------------------------------------------------
+  // CACHE INVALIDATION
+  // --------------------------------------------------
+
+  const invalidatePublicCatalogue = () => {
+    invalidateCacheGroup("products");
+    invalidateCacheGroup("categories");
+    invalidateCacheGroup("product-details:");
+  };
+
+  // --------------------------------------------------
+  // IMAGE PREVIEW CLEANUP
+  // --------------------------------------------------
+
+  const clearNewImagePreviews = () => {
+    previewUrlsRef.current.forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
+
+    previewUrlsRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => {
+      previewUrlsRef.current.forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+
+      previewUrlsRef.current = [];
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // LOAD PRODUCTS AND CATEGORIES
+  // --------------------------------------------------
 
   const loadData = async () => {
     setLoading(true);
     setError("");
 
-    const [productResult, categoryResult] = await Promise.all([
-      supabase
-        .from("products")
-        .select("*")
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("product_categories")
-        .select("id, name, is_active, sort_order")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true }),
-    ]);
+    try {
+      const [productResult, categoryResult] = await Promise.all([
+        supabase
+          .from("products")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: false }),
 
-    if (productResult.error) {
-      setError(productResult.error.message);
-      setProducts([]);
-    } else {
-      setProducts((productResult.data ?? []) as Product[]);
-    }
+        supabase
+          .from("product_categories")
+          .select("id, name, slug, description, is_active, sort_order")
+          .order("sort_order", { ascending: true }),
+      ]);
 
-    if (categoryResult.error) {
-      setError((current) =>
-        current
-          ? `${current} | Categories: ${categoryResult.error.message}`
-          : `Categories: ${categoryResult.error.message}`,
+      if (productResult.error) {
+        setError(productResult.error.message);
+        setProducts([]);
+      } else {
+        setProducts((productResult.data ?? []) as Product[]);
+      }
+
+      if (categoryResult.error) {
+        setError((current) =>
+          current
+            ? `${current} | Categories: ${categoryResult.error.message}`
+            : `Categories: ${categoryResult.error.message}`,
+        );
+      } else {
+        setCategories((categoryResult.data ?? []) as Category[]);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not load catalogue data.",
       );
-    } else {
-      setCategories((categoryResult.data ?? []) as Category[]);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
     void loadData();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      newImages.forEach((image) => URL.revokeObjectURL(image.preview));
-    };
-  }, [newImages]);
+  // --------------------------------------------------
+  // FILTERING AND STATISTICS
+  // --------------------------------------------------
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
+      const searchTerm = search.toLowerCase();
+
       const matchesSearch =
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.slug.toLowerCase().includes(search.toLowerCase());
+        product.name.toLowerCase().includes(searchTerm) ||
+        product.slug.toLowerCase().includes(searchTerm);
 
       const matchesCategory =
-        categoryFilter === "all" || product.category_id === categoryFilter;
+        categoryFilter === "all" ||
+        product.category_id === categoryFilter;
 
       const matchesStatus =
-        statusFilter === "all" || product.status === statusFilter;
+        statusFilter === "all" ||
+        product.status === statusFilter;
 
       return matchesSearch && matchesCategory && matchesStatus;
     });
@@ -185,14 +255,21 @@ export default function Products() {
   );
 
   const categoryName = (id: string | null) =>
-    categories.find((category) => category.id === id)?.name ?? "Uncategorised";
+    categories.find((category) => category.id === id)?.name ??
+    "Uncategorised";
+
+  // --------------------------------------------------
+  // PRODUCT EDITOR
+  // --------------------------------------------------
 
   const resetEditor = () => {
+    clearNewImagePreviews();
+
     setEditingProduct(null);
     setForm(emptyForm);
     setSpecifications([{ key: "", value: "" }]);
     setExistingImages([]);
-    setRemovedImageIds([]);
+    setRemovedImages([]);
     setNewImages([]);
     setFeaturedImageKey("");
     setError("");
@@ -205,7 +282,9 @@ export default function Products() {
 
   const openEdit = async (product: Product) => {
     resetEditor();
+
     setEditingProduct(product);
+
     setForm({
       name: product.name,
       slug: product.slug,
@@ -222,8 +301,12 @@ export default function Products() {
     });
 
     const specEntries = Object.entries(product.specifications ?? {}).map(
-      ([key, value]) => ({ key, value: String(value) }),
+      ([key, value]) => ({
+        key,
+        value: String(value),
+      }),
     );
+
     setSpecifications(
       specEntries.length ? specEntries : [{ key: "", value: "" }],
     );
@@ -238,11 +321,15 @@ export default function Products() {
       setError(`Could not load product images: ${imageError.message}`);
     } else {
       const images = (data ?? []) as ProductImage[];
+
       setExistingImages(images);
 
       const featured = images.find((image) => image.is_featured);
+
       if (featured) {
         setFeaturedImageKey(`existing:${featured.id}`);
+      } else {
+        setFeaturedImageKey("");
       }
     }
 
@@ -262,21 +349,36 @@ export default function Products() {
       preview: URL.createObjectURL(file),
     }));
 
+    previewUrlsRef.current.push(
+      ...additions.map((image) => image.preview),
+    );
+
     setNewImages((current) => [...current, ...additions]);
   };
 
   const removeNewImage = (id: string) => {
-    setNewImages((current) => {
-      const image = current.find((item) => item.id === id);
-      if (image) URL.revokeObjectURL(image.preview);
-      return current.filter((item) => item.id !== id);
-    });
+    const image = newImages.find((item) => item.id === id);
 
-    if (featuredImageKey === `new:${id}`) setFeaturedImageKey("");
+    if (image) {
+      URL.revokeObjectURL(image.preview);
+
+      previewUrlsRef.current = previewUrlsRef.current.filter(
+        (url) => url !== image.preview,
+      );
+    }
+
+    setNewImages((current) =>
+      current.filter((item) => item.id !== id),
+    );
+
+    if (featuredImageKey === `new:${id}`) {
+      setFeaturedImageKey("");
+    }
   };
 
   const removeExistingImage = (image: ProductImage) => {
-    setRemovedImageIds((current) => [...current, image.id]);
+    setRemovedImages((current) => [...current, image]);
+
     setExistingImages((current) =>
       current.filter((item) => item.id !== image.id),
     );
@@ -286,8 +388,15 @@ export default function Products() {
     }
   };
 
-  const saveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
+  // --------------------------------------------------
+  // SAVE PRODUCT
+  // --------------------------------------------------
+
+  const saveProduct = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
+
     if (!form.name.trim()) return;
 
     setSaving(true);
@@ -343,36 +452,40 @@ export default function Products() {
           .single();
 
         if (insertError) throw insertError;
+
         productId = data.id;
       }
 
-      if (!productId) throw new Error("Could not identify the saved product.");
-
-      // Remove images that were deleted in the editor.
-      const removedImages = existingImages.filter((image) =>
-        removedImageIds.includes(image.id),
-      );
-
-      for (const image of removedImages) {
-        if (image.storage_path) {
-          const { error: storageError } = await supabase.storage
-            .from("product-images")
-            .remove([image.storage_path]);
-
-          if (storageError) throw storageError;
-        }
+      if (!productId) {
+        throw new Error("Could not identify the saved product.");
       }
 
-      if (removedImageIds.length) {
+      // Delete removed image files from storage.
+      const removedPaths = removedImages
+        .map((image) => image.storage_path)
+        .filter((path): path is string => Boolean(path));
+
+      if (removedPaths.length) {
+        const { error: storageError } = await supabase.storage
+          .from("product-images")
+          .remove(removedPaths);
+
+        if (storageError) throw storageError;
+      }
+
+      if (removedImages.length) {
         const { error: deleteImageError } = await supabase
           .from("product_images")
           .delete()
-          .in("id", removedImageIds);
+          .in(
+            "id",
+            removedImages.map((image) => image.id),
+          );
 
         if (deleteImageError) throw deleteImageError;
       }
 
-      // Upload newly selected images.
+      // Upload new images.
       const uploadedImages: {
         id: string;
         image_url: string;
@@ -380,8 +493,13 @@ export default function Products() {
       }[] = [];
 
       for (const image of newImages) {
-        const safeName = image.file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-        const storagePath = `${productId}/${crypto.randomUUID()}-${safeName}`;
+        const safeName = image.file.name.replace(
+          /[^a-zA-Z0-9._-]/g,
+          "-",
+        );
+
+        const storagePath =
+          `${productId}/${crypto.randomUUID()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("product-images")
@@ -413,21 +531,23 @@ export default function Products() {
         ? featuredImageKey
         : allImageKeys[0] ?? "";
 
-      // Update existing image ordering and featured status.
+      // Update existing image ordering.
       for (let index = 0; index < existingImages.length; index += 1) {
         const image = existingImages[index];
+
         const { error: imageUpdateError } = await supabase
           .from("product_images")
           .update({
             sort_order: index,
-            is_featured: chosenFeaturedKey === `existing:${image.id}`,
+            is_featured:
+              chosenFeaturedKey === `existing:${image.id}`,
           })
           .eq("id", image.id);
 
         if (imageUpdateError) throw imageUpdateError;
       }
 
-      // Save uploaded image records.
+      // Insert uploaded image records.
       if (uploadedImages.length) {
         const imageRows = uploadedImages.map((image, index) => ({
           product_id: productId,
@@ -435,7 +555,8 @@ export default function Products() {
           storage_path: image.storage_path,
           alt_text: form.name.trim(),
           sort_order: existingImages.length + index,
-          is_featured: chosenFeaturedKey === `new:${image.id}`,
+          is_featured:
+            chosenFeaturedKey === `new:${image.id}`,
         }));
 
         const { error: imageInsertError } = await supabase
@@ -445,10 +566,10 @@ export default function Products() {
         if (imageInsertError) throw imageInsertError;
       }
 
-      // Keep the main product image URL in sync with the selected featured image.
       const featuredExisting = existingImages.find(
         (image) => `existing:${image.id}` === chosenFeaturedKey,
       );
+
       const featuredNew = uploadedImages.find(
         (image) => `new:${image.id}` === chosenFeaturedKey,
       );
@@ -456,28 +577,170 @@ export default function Products() {
       const featuredUrl =
         featuredExisting?.image_url ??
         featuredNew?.image_url ??
-        (existingImages.length
-          ? existingImages[0].image_url
-          : editingProduct?.featured_image_url ?? null);
+        null;
 
       const { error: featuredUpdateError } = await supabase
         .from("products")
-        .update({ featured_image_url: featuredUrl })
+        .update({
+          featured_image_url: featuredUrl,
+        })
         .eq("id", productId);
 
       if (featuredUpdateError) throw featuredUpdateError;
 
+      // Clear public website caches after successful save.
+      invalidatePublicCatalogue();
+
       setModalOpen(false);
       resetEditor();
+
       await loadData();
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Something went wrong.";
+        err instanceof Error
+          ? err.message
+          : "Something went wrong.";
+
       setError(message);
     } finally {
       setSaving(false);
     }
   };
+
+  // --------------------------------------------------
+  // CATEGORY MANAGEMENT
+  // --------------------------------------------------
+
+  const openCategoryManager = () => {
+    setEditingCategory(null);
+    setCategoryForm(emptyCategoryForm);
+    setError("");
+    setCategoryModalOpen(true);
+  };
+
+  const openEditCategory = (category: Category) => {
+    setEditingCategory(category);
+
+    setCategoryForm({
+      name: category.name,
+      slug: category.slug,
+      description: category.description ?? "",
+      sort_order: category.sort_order,
+      is_active: category.is_active,
+    });
+  };
+
+  const saveCategory = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    if (!categoryForm.name.trim()) return;
+
+    setCategorySaving(true);
+    setError("");
+
+    try {
+      const payload = {
+        name: categoryForm.name.trim(),
+        slug: slugify(categoryForm.slug || categoryForm.name),
+        description: categoryForm.description.trim() || null,
+        sort_order: Number(categoryForm.sort_order) || 0,
+        is_active: categoryForm.is_active,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (!payload.slug) {
+        throw new Error("Please enter a valid category name.");
+      }
+
+      if (editingCategory) {
+        const { error: updateError } = await supabase
+          .from("product_categories")
+          .update(payload)
+          .eq("id", editingCategory.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from("product_categories")
+          .insert(payload);
+
+        if (insertError) throw insertError;
+      }
+
+      // Clear category and catalogue caches.
+      invalidatePublicCatalogue();
+
+      setEditingCategory(null);
+      setCategoryForm(emptyCategoryForm);
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not save category.",
+      );
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
+  const deleteCategory = async (category: Category) => {
+    const confirmed = window.confirm(
+      `Delete "${category.name}"?`,
+    );
+
+    if (!confirmed) return;
+
+    setError("");
+
+    try {
+      const { count, error: countError } = await supabase
+        .from("products")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("category_id", category.id);
+
+      if (countError) throw countError;
+
+      if ((count ?? 0) > 0) {
+        throw new Error(
+          `This category is assigned to ${count} product(s). Reassign those products before deleting it.`,
+        );
+      }
+
+      const { error: deleteError } = await supabase
+        .from("product_categories")
+        .delete()
+        .eq("id", category.id);
+
+      if (deleteError) throw deleteError;
+
+      if (editingCategory?.id === category.id) {
+        setEditingCategory(null);
+        setCategoryForm(emptyCategoryForm);
+      }
+
+      // Clear category and catalogue caches.
+      invalidatePublicCatalogue();
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not delete category.",
+      );
+    }
+  };
+
+  // --------------------------------------------------
+  // DELETE PRODUCT
+  // --------------------------------------------------
 
   const deleteProduct = async (product: Product) => {
     const confirmed = window.confirm(
@@ -515,25 +778,22 @@ export default function Products() {
 
       if (deleteError) throw deleteError;
 
+      // Clear public catalogue and product detail caches.
+      invalidatePublicCatalogue();
+
       await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete product.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not delete product.",
+      );
     }
   };
 
-  // const updateStatus = async (product: Product, status: ProductStatus) => {
-  //   const { error: updateError } = await supabase
-  //     .from("products")
-  //     .update({ status })
-  //     .eq("id", product.id);
-
-  //   if (updateError) {
-  //     setError(updateError.message);
-  //     return;
-  //   }
-
-  //   await loadData();
-  // };
+  // --------------------------------------------------
+  // PAGE UI
+  // --------------------------------------------------
 
   return (
     <main className="products-page">
@@ -544,16 +804,29 @@ export default function Products() {
           <p>Manage your products, images and catalogue visibility.</p>
         </div>
 
-        <button className="primary-button" onClick={openCreate}>
-          <Plus size={17} />
-          Add Product
-        </button>
+        <div className="products-heading-actions">
+          <button
+            className="secondary-button"
+            onClick={openCategoryManager}
+          >
+            <Tags size={17} />
+            Manage Categories
+          </button>
+
+          <button className="primary-button" onClick={openCreate}>
+            <Plus size={17} />
+            Add Product
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="products-error" role="alert">
           <span>{error}</span>
-          <button onClick={() => setError("")} aria-label="Dismiss error">
+          <button
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+          >
             <X size={16} />
           </button>
         </div>
@@ -565,16 +838,19 @@ export default function Products() {
           <strong>{counts.total}</strong>
           <Package size={19} />
         </div>
+
         <div className="product-stat-card">
           <span>Published</span>
           <strong>{counts.published}</strong>
           <Eye size={19} />
         </div>
+
         <div className="product-stat-card">
           <span>Drafts</span>
           <strong>{counts.drafts}</strong>
           <Pencil size={19} />
         </div>
+
         <div className="product-stat-card">
           <span>Featured</span>
           <strong>{counts.featured}</strong>
@@ -596,31 +872,41 @@ export default function Products() {
           <div className="products-filters">
             <label>
               <span className="sr-only">Filter by category</span>
+
               <select
                 value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
+                onChange={(event) =>
+                  setCategoryFilter(event.target.value)
+                }
               >
                 <option value="all">All categories</option>
+
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
+                    {!category.is_active ? " (Inactive)" : ""}
                   </option>
                 ))}
               </select>
+
               <ChevronDown size={14} />
             </label>
 
             <label>
               <span className="sr-only">Filter by status</span>
+
               <select
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value)
+                }
               >
                 <option value="all">All statuses</option>
                 <option value="published">Published</option>
                 <option value="draft">Draft</option>
                 <option value="archived">Archived</option>
               </select>
+
               <ChevronDown size={14} />
             </label>
 
@@ -680,6 +966,7 @@ export default function Products() {
                             <ImageIcon size={19} />
                           )}
                         </div>
+
                         <div>
                           <strong>{product.name}</strong>
                           <span>/{product.slug}</span>
@@ -694,7 +981,9 @@ export default function Products() {
                     </td>
 
                     <td>
-                      <span className={`product-status status-${product.status}`}>
+                      <span
+                        className={`product-status status-${product.status}`}
+                      >
                         <span />
                         {product.status}
                       </span>
@@ -748,11 +1037,239 @@ export default function Products() {
         </div>
       </section>
 
+      {/* CATEGORY MANAGEMENT MODAL */}
+
+      {categoryModalOpen && (
+        <div
+          className="product-modal-backdrop"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              !categorySaving
+            ) {
+              setCategoryModalOpen(false);
+            }
+          }}
+        >
+          <section
+            className="product-modal category-manager-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="category-modal-title"
+          >
+            <div className="product-modal-header">
+              <div>
+                <span className="eyebrow">
+                  CATALOGUE ORGANISATION
+                </span>
+                <h2 id="category-modal-title">
+                  Manage Categories
+                </h2>
+              </div>
+
+              <button
+                className="icon-button"
+                onClick={() => {
+                  if (!categorySaving) {
+                    setCategoryModalOpen(false);
+                  }
+                }}
+                aria-label="Close category manager"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="product-modal-body">
+              <section className="editor-section">
+                <h3>
+                  {editingCategory ? "Edit Category" : "Create Category"}
+                </h3>
+
+                <form onSubmit={saveCategory}>
+                  <div className="editor-grid">
+                    <label className="editor-field full-field">
+                      Category name *
+                      <input
+                        required
+                        value={categoryForm.name}
+                        onChange={(event) => {
+                          const name = event.target.value;
+
+                          setCategoryForm((current) => ({
+                            ...current,
+                            name,
+                            slug: editingCategory
+                              ? current.slug
+                              : slugify(name),
+                          }));
+                        }}
+                        placeholder="e.g. Agricultural Commodities"
+                      />
+                    </label>
+
+                    <label className="editor-field full-field">
+                      URL slug *
+                      <input
+                        required
+                        value={categoryForm.slug}
+                        onChange={(event) =>
+                          setCategoryForm((current) => ({
+                            ...current,
+                            slug: slugify(event.target.value),
+                          }))
+                        }
+                        placeholder="agricultural-commodities"
+                      />
+                    </label>
+
+                    <label className="editor-field full-field">
+                      Description
+                      <textarea
+                        rows={3}
+                        value={categoryForm.description}
+                        onChange={(event) =>
+                          setCategoryForm((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                        placeholder="Describe this product category..."
+                      />
+                    </label>
+
+                    <label className="editor-field">
+                      Display order
+                      <input
+                        type="number"
+                        value={categoryForm.sort_order}
+                        onChange={(event) =>
+                          setCategoryForm((current) => ({
+                            ...current,
+                            sort_order: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+
+                    <label className="editor-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={categoryForm.is_active}
+                        onChange={(event) =>
+                          setCategoryForm((current) => ({
+                            ...current,
+                            is_active: event.target.checked,
+                          }))
+                        }
+                      />
+
+                      <span>
+                        <strong>Active category</strong>
+                        <small>
+                          Available for product assignment.
+                        </small>
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="product-modal-footer">
+                    {editingCategory && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={categorySaving}
+                        onClick={() => {
+                          setEditingCategory(null);
+                          setCategoryForm(emptyCategoryForm);
+                        }}
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={categorySaving}
+                    >
+                      {categorySaving
+                        ? "Saving..."
+                        : editingCategory
+                          ? "Update Category"
+                          : "Create Category"}
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="editor-section">
+                <h3>
+                  Existing Categories ({categories.length})
+                </h3>
+
+                {categories.length === 0 ? (
+                  <p className="editor-help">
+                    No categories created yet. Create your first category above.
+                  </p>
+                ) : (
+                  <div className="category-manager-list">
+                    {categories.map((category) => (
+                      <div
+                        className="category-manager-item"
+                        key={category.id}
+                      >
+                        <div>
+                          <strong>{category.name}</strong>
+                          <span>/{category.slug}</span>
+                          <small>
+                            {category.is_active ? "Active" : "Inactive"}
+                            {" · "}
+                            Order: {category.sort_order}
+                          </small>
+                        </div>
+
+                        <div className="product-row-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            title="Edit category"
+                            aria-label={`Edit ${category.name}`}
+                            onClick={() => openEditCategory(category)}
+                          >
+                            <Pencil size={16} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="icon-button danger-icon"
+                            title="Delete category"
+                            aria-label={`Delete ${category.name}`}
+                            onClick={() => void deleteCategory(category)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* PRODUCT EDITOR MODAL */}
+
       {modalOpen && (
         <div
           className="product-modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !saving) {
+            if (
+              event.target === event.currentTarget &&
+              !saving
+            ) {
               setModalOpen(false);
               resetEditor();
             }
@@ -767,8 +1284,11 @@ export default function Products() {
             <div className="product-modal-header">
               <div>
                 <span className="eyebrow">
-                  {editingProduct ? "UPDATE CATALOGUE" : "NEW CATALOGUE ITEM"}
+                  {editingProduct
+                    ? "UPDATE CATALOGUE"
+                    : "NEW CATALOGUE ITEM"}
                 </span>
+
                 <h2 id="product-modal-title">
                   {editingProduct ? "Edit Product" : "Add Product"}
                 </h2>
@@ -801,6 +1321,7 @@ export default function Products() {
                         value={form.name}
                         onChange={(event) => {
                           const name = event.target.value;
+
                           setForm((current) => ({
                             ...current,
                             name,
@@ -830,6 +1351,7 @@ export default function Products() {
 
                     <label className="editor-field">
                       Category
+
                       <select
                         value={form.category_id}
                         onChange={(event) =>
@@ -840,11 +1362,21 @@ export default function Products() {
                         }
                       >
                         <option value="">Select category</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
+
+                        {categories
+                          .filter(
+                            (category) =>
+                              category.is_active ||
+                              category.id === form.category_id,
+                          )
+                          .map((category) => (
+                            <option
+                              key={category.id}
+                              value={category.id}
+                            >
+                              {category.name}
+                            </option>
+                          ))}
                       </select>
                     </label>
 
@@ -882,6 +1414,7 @@ export default function Products() {
 
                 <section className="editor-section">
                   <h3>Product images</h3>
+
                   <p className="editor-help">
                     Upload multiple images. Choose one image as the featured
                     image used in the catalogue.
@@ -889,8 +1422,15 @@ export default function Products() {
 
                   <div className="image-upload-grid">
                     {existingImages.map((image) => (
-                      <div className="image-preview-card" key={image.id}>
-                        <img src={image.image_url} alt={image.alt_text ?? ""} />
+                      <div
+                        className="image-preview-card"
+                        key={image.id}
+                      >
+                        <img
+                          src={image.image_url}
+                          alt={image.alt_text ?? ""}
+                        />
+
                         <button
                           type="button"
                           className="image-remove"
@@ -899,17 +1439,22 @@ export default function Products() {
                         >
                           <X size={14} />
                         </button>
+
                         <button
                           type="button"
-                          className={`image-feature ${featuredImageKey === `existing:${image.id}`
+                          className={`image-feature ${
+                            featuredImageKey === `existing:${image.id}`
                               ? "image-feature-active"
                               : ""
-                            }`}
+                          }`}
                           onClick={() =>
-                            setFeaturedImageKey(`existing:${image.id}`)
+                            setFeaturedImageKey(
+                              `existing:${image.id}`,
+                            )
                           }
                         >
                           <Star size={13} />
+
                           {featuredImageKey === `existing:${image.id}`
                             ? "Featured"
                             : "Set featured"}
@@ -918,8 +1463,15 @@ export default function Products() {
                     ))}
 
                     {newImages.map((image) => (
-                      <div className="image-preview-card" key={image.id}>
-                        <img src={image.preview} alt={image.file.name} />
+                      <div
+                        className="image-preview-card"
+                        key={image.id}
+                      >
+                        <img
+                          src={image.preview}
+                          alt={image.file.name}
+                        />
+
                         <button
                           type="button"
                           className="image-remove"
@@ -928,17 +1480,20 @@ export default function Products() {
                         >
                           <X size={14} />
                         </button>
+
                         <button
                           type="button"
-                          className={`image-feature ${featuredImageKey === `new:${image.id}`
+                          className={`image-feature ${
+                            featuredImageKey === `new:${image.id}`
                               ? "image-feature-active"
                               : ""
-                            }`}
+                          }`}
                           onClick={() =>
                             setFeaturedImageKey(`new:${image.id}`)
                           }
                         >
                           <Star size={13} />
+
                           {featuredImageKey === `new:${image.id}`
                             ? "Featured"
                             : "Set featured"}
@@ -1000,6 +1555,7 @@ export default function Products() {
                         }
                         placeholder="UAE, Saudi Arabia, Oman"
                       />
+
                       <span className="field-hint">
                         Separate countries with commas.
                       </span>
@@ -1015,6 +1571,7 @@ export default function Products() {
                         Add product-specific details as key-value pairs.
                       </p>
                     </div>
+
                     <button
                       type="button"
                       className="text-button"
@@ -1025,46 +1582,59 @@ export default function Products() {
                         ])
                       }
                     >
-                      <Plus size={15} /> Add row
+                      <Plus size={15} />
+                      Add row
                     </button>
                   </div>
 
                   <div className="specification-list">
                     {specifications.map((spec, index) => (
-                      <div className="specification-row" key={index}>
+                      <div
+                        className="specification-row"
+                        key={index}
+                      >
                         <input
                           value={spec.key}
                           onChange={(event) =>
                             setSpecifications((current) =>
                               current.map((item, itemIndex) =>
                                 itemIndex === index
-                                  ? { ...item, key: event.target.value }
+                                  ? {
+                                      ...item,
+                                      key: event.target.value,
+                                    }
                                   : item,
                               ),
                             )
                           }
                           placeholder="Specification"
                         />
+
                         <input
                           value={spec.value}
                           onChange={(event) =>
                             setSpecifications((current) =>
                               current.map((item, itemIndex) =>
                                 itemIndex === index
-                                  ? { ...item, value: event.target.value }
+                                  ? {
+                                      ...item,
+                                      value: event.target.value,
+                                    }
                                   : item,
                               ),
                             )
                           }
                           placeholder="Value"
                         />
+
                         <button
                           type="button"
                           className="icon-button danger-icon"
                           onClick={() =>
                             setSpecifications((current) =>
                               current.filter(
-                                (_, itemIndex) => itemIndex !== index,
+                                (_, itemIndex) =>
+                                  itemIndex !== index,
                               ),
                             )
                           }
@@ -1123,9 +1693,12 @@ export default function Products() {
                           }))
                         }
                       />
+
                       <span>
                         <strong>Feature this product</strong>
-                        <small>Show this product in featured sections.</small>
+                        <small>
+                          Show this product in featured sections.
+                        </small>
                       </span>
                     </label>
                   </div>

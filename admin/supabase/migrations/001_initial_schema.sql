@@ -1,6 +1,6 @@
 
 -- ============================================================
--- SHREEM SOLUTIONS
+-- SHREEM SOLUTION
 -- Initial Supabase Database Migration
 -- Version: 001
 -- Run once on a fresh Supabase project

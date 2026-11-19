@@ -1,82 +1,131 @@
 
-import { useRef, useState, useEffect, useCallback } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
-import { supabase } from "../lib/supabase";
+import { useEffect, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import { cachedFetch, CACHE_KEYS } from "../lib/cache";
 
-
+interface ProductCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+}
 
 interface DisplayProduct {
   id: string;
   slug: string;
-  number: string;
   title: string;
-  shortTitle: string;
   description: string;
   image: string;
 }
 
-export default function Products() {
-  const sliderRef = useRef<HTMLDivElement>(null);
+interface CategorySection {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  product: DisplayProduct;
+}
 
-  const [products, setProducts] = useState<DisplayProduct[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [maxIndex, setMaxIndex] = useState(0);
+interface HomepageProductsData {
+  categories: CategorySection[];
+}
+
+const PRODUCTS_CACHE_TTL = 5 * 60 * 1000;
+
+export default function Products() {
+  const [categories, setCategories] = useState<CategorySection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch published products and their images
   useEffect(() => {
+    let active = true;
+
     const fetchProducts = async () => {
       setLoading(true);
       setError("");
 
       try {
-        const { data: productData, error: productError } =
-          await supabase
-            .from("products")
-            .select(`
-              id,
-              name,
-              slug,
-              short_description,
-              description,
-              featured_image_url,
-              sort_order
-            `)
-            .eq("status", "published")
-            .order("sort_order", { ascending: true });
+        const result = await cachedFetch<HomepageProductsData>(
+          `${CACHE_KEYS.products}:homepage`,
+          async () => {
+            const [
+              { data: categoryData, error: categoryError },
+              { data: productData, error: productError },
+            ] = await Promise.all([
+              supabase
+                .from("product_categories")
+                .select("id, name, slug, description, sort_order")
+                .eq("is_active", true)
+                .order("sort_order", { ascending: true }),
 
-        if (productError) throw productError;
+              supabase
+                .from("products")
+                .select(`
+                  id,
+                  category_id,
+                  name,
+                  slug,
+                  short_description,
+                  description,
+                  featured_image_url,
+                  sort_order
+                `)
+                .eq("status", "published")
+                .order("sort_order", { ascending: true }),
+            ]);
 
-        if (!productData || productData.length === 0) {
-          setProducts([]);
-          return;
-        }
+            if (categoryError) throw categoryError;
+            if (productError) throw productError;
 
-        const productIds = productData.map((product) => product.id);
+            if (!categoryData?.length || !productData?.length) {
+              return { categories: [] };
+            }
 
-        const { data: imageData, error: imageError } =
-          await supabase
-            .from("product_images")
-            .select(`
-              id,
-              product_id,
-              image_url,
-              sort_order,
-              is_featured
-            `)
-            .in("product_id", productIds)
-            .order("sort_order", { ascending: true });
+            const productIds = productData.map(
+              (product) => product.id
+            );
 
-        if (imageError) throw imageError;
+            const { data: imageData, error: imageError } =
+              await supabase
+                .from("product_images")
+                .select(`
+                  id,
+                  product_id,
+                  image_url,
+                  sort_order,
+                  is_featured
+                `)
+                .in("product_id", productIds)
+                .order("sort_order", { ascending: true });
 
-        const formattedProducts: DisplayProduct[] =
-          productData
-            .map((product, index) => {
-              const productImages = (imageData || [])
-                .filter((image) => image.product_id === product.id)
-                .sort((a, b) => a.sort_order - b.sort_order);
+            if (imageError) throw imageError;
+
+            const imagesByProduct = new Map<
+              string,
+              NonNullable<typeof imageData>
+            >();
+
+            (imageData ?? []).forEach((image) => {
+              const existing =
+                imagesByProduct.get(image.product_id) ?? [];
+
+              existing.push(image);
+              imagesByProduct.set(image.product_id, existing);
+            });
+
+            const productsByCategory = new Map<
+              string,
+              DisplayProduct[]
+            >();
+
+            productData.forEach((product) => {
+              if (!product.category_id) return;
+
+              const productImages =
+                imagesByProduct.get(product.id) ?? [];
 
               const featuredImage = productImages.find(
                 (image) => image.is_featured
@@ -88,121 +137,80 @@ export default function Products() {
                 productImages[0]?.image_url ||
                 "";
 
-              return {
+              if (!image) return;
+
+              const displayProduct: DisplayProduct = {
                 id: product.id,
                 slug: product.slug,
-                number: String(index + 1).padStart(2, "0"),
                 title: product.name,
-                shortTitle: product.name.toUpperCase(),
                 description:
                   product.short_description ||
                   product.description ||
                   "Contact us for more information about this product.",
                 image,
               };
-            })
-            .filter((product) => product.image);
 
-        setProducts(formattedProducts);
+              const existing =
+                productsByCategory.get(product.category_id) ?? [];
+
+              existing.push(displayProduct);
+              productsByCategory.set(
+                product.category_id,
+                existing
+              );
+            });
+
+            const categorySections: CategorySection[] =
+              categoryData
+                .map((category: ProductCategory) => {
+                  const selectedProduct =
+                    productsByCategory.get(category.id)?.[0];
+
+                  if (!selectedProduct) return null;
+
+                  return {
+                    id: category.id,
+                    name: category.name,
+                    slug: category.slug,
+                    description: category.description,
+                    product: selectedProduct,
+                  };
+                })
+                .filter(
+                  (category): category is CategorySection =>
+                    category !== null
+                )
+                .slice(0, 4);
+
+            return { categories: categorySections };
+          },
+          PRODUCTS_CACHE_TTL
+        );
+
+        if (active) {
+          setCategories(result.categories);
+        }
       } catch (err) {
         console.error("Products loading error:", err);
-        setError("Unable to load products. Please try again later.");
+
+        if (active) {
+          setError(
+            "Unable to load products. Please try again later."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     fetchProducts();
+
+    return () => {
+      active = false;
+    };
   }, []);
-
-  const updateCarousel = useCallback(() => {
-    const slider = sliderRef.current;
-
-    if (!slider) return;
-
-    const cards = Array.from(
-      slider.querySelectorAll<HTMLElement>(".product-card")
-    );
-
-    if (!cards.length) {
-      setActiveIndex(0);
-      setMaxIndex(0);
-      return;
-    }
-
-    const maxScroll = slider.scrollWidth - slider.clientWidth;
-
-    const lastReachableIndex = cards.reduce(
-      (last, card, index) => {
-        const cardPosition = card.offsetLeft - slider.offsetLeft;
-
-        return cardPosition <= maxScroll + 2 ? index : last;
-      },
-      0
-    );
-
-    setMaxIndex(lastReachableIndex);
-
-    const current = cards.reduce(
-      (closest, card, index) => {
-        const distance = Math.abs(
-          card.offsetLeft -
-          slider.offsetLeft -
-          slider.scrollLeft
-        );
-
-        return distance < closest.distance
-          ? { index, distance }
-          : closest;
-      },
-      { index: 0, distance: Infinity }
-    );
-
-    setActiveIndex(
-      Math.min(current.index, lastReachableIndex)
-    );
-  }, []);
-
-  const scrollToCard = (index: number) => {
-    const slider = sliderRef.current;
-
-    if (!slider) return;
-
-    const cards =
-      slider.querySelectorAll<HTMLElement>(".product-card");
-
-    const card = cards[index];
-
-    if (!card) return;
-
-    slider.scrollTo({
-      left: card.offsetLeft - slider.offsetLeft,
-      behavior: "smooth",
-    });
-  };
-
-  const moveSlider = (direction: number) => {
-    const nextIndex = Math.max(
-      0,
-      Math.min(maxIndex, activeIndex + direction)
-    );
-
-    scrollToCard(nextIndex);
-  };
-
-  useEffect(() => {
-    updateCarousel();
-
-    const slider = sliderRef.current;
-
-    if (!slider) return;
-
-    const resizeObserver = new ResizeObserver(updateCarousel);
-
-    resizeObserver.observe(slider);
-
-    return () => resizeObserver.disconnect();
-  }, [products, updateCarousel]);
 
   return (
     <section className="products-section" id="products">
@@ -220,52 +228,13 @@ export default function Products() {
             </h2>
           </div>
 
-          <div className="products-controls">
-            <button
-              type="button"
-              className="products-control"
-              aria-label="Previous products"
-              onClick={() => moveSlider(-1)}
-              disabled={activeIndex === 0 || loading}
-            >
-              <ArrowLeft size={17} />
-            </button>
-
-            <button
-              type="button"
-              className="products-control products-control-next"
-              aria-label="Next products"
-              onClick={() => moveSlider(1)}
-              disabled={
-                activeIndex >= maxIndex ||
-                loading ||
-                products.length === 0
-              }
-            >
-              <ArrowRight size={17} />
-            </button>
-
-            {products.length > 0 && (
-              <div
-                className="products-dots"
-                aria-label="Product slides"
-              >
-                {products.map((product, index) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    className={`products-dot ${activeIndex === index ? "active" : ""
-                      }`}
-                    aria-label={`Show ${product.title}`}
-                    aria-current={
-                      activeIndex === index ? "true" : undefined
-                    }
-                    onClick={() => scrollToCard(index)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <Link
+            to="/products"
+            className="products-enquiry-link"
+          >
+            EXPLORE ALL PRODUCTS
+            <ArrowRight size={15} />
+          </Link>
         </div>
 
         {loading && (
@@ -280,7 +249,7 @@ export default function Products() {
           </div>
         )}
 
-        {!loading && !error && products.length === 0 && (
+        {!loading && !error && categories.length === 0 && (
           <div className="products-track">
             <p>
               Our product catalogue is being updated.
@@ -289,40 +258,55 @@ export default function Products() {
           </div>
         )}
 
-        {!loading && !error && products.length > 0 && (
-          <div
-            className="products-track"
-            ref={sliderRef}
-            onScroll={updateCarousel}
-          >
-            {products.map((product) => (
-              <Link
-                to={`/products/${product.slug}`}
-                className="product-card"
-                key={product.id}
-                aria-label={`View ${product.title}`}
-                title={product.description}
+        {!loading && !error && categories.length > 0 && (
+          <div className="product-category-grid">
+            {categories.map((category, index) => (
+              <article
+                className="product-category-card"
+                key={category.id}
               >
-                <div className="product-image-wrap">
+                <Link
+                  to={`/products?category=${encodeURIComponent(
+                    category.slug
+                  )}`}
+                  className="product-category-image"
+                  aria-label={`Explore ${category.name}`}
+                >
                   <img
-                    src={product.image}
-                    alt={product.title}
+                    src={category.product.image}
+                    alt={category.product.title}
                     loading="lazy"
                   />
 
                   <span className="product-number">
-                    {product.number}
+                    {String(index + 1).padStart(2, "0")}
                   </span>
-                </div>
 
-                <div className="product-card-footer">
-                  <span>{product.shortTitle}</span>
-
-                  <span className="product-card-arrow">
-                    <ArrowRight size={15} />
+                  <span className="product-category-overlay">
+                    <ArrowRight size={20} />
                   </span>
+                </Link>
+
+                <div className="product-category-card-content">
+                  <span className="product-category-label">
+                    CATEGORY {String(index + 1).padStart(2, "0")}
+                  </span>
+
+                  <h3>{category.name}</h3>
+
+                  <p>{category.product.title}</p>
+
+                  <Link
+                    to={`/products?category=${encodeURIComponent(
+                      category.slug
+                    )}`}
+                    className="product-category-link"
+                  >
+                    EXPLORE CATEGORY
+                    <ArrowRight size={14} />
+                  </Link>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         )}
@@ -330,8 +314,8 @@ export default function Products() {
         <div className="products-bottom">
           <p>
             From agricultural produce to industrial equipment,
-            we help connect your requirements with the right
-            supply sources.
+            we connect your business with reliable global
+            supply opportunities.
           </p>
 
           <a

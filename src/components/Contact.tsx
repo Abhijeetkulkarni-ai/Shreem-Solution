@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { supabase } from "../lib/supabase";
+
 import {
   ArrowUpRight,
   Mail,
@@ -12,6 +12,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { supabase } from "../lib/supabase";
 import { company } from "../data/company";
 
 interface ContactFormData {
@@ -38,10 +39,11 @@ export default function Contact() {
 
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [showForm, setShowForm] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string>("");
 
   const phoneLink = company.phone.primary.replace(/[^\d+]/g, "");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+
   const fullAddress = [
     company.address.line1,
     company.address.line2,
@@ -53,6 +55,7 @@ export default function Contact() {
     .filter(Boolean)
     .join(", ");
 
+  // Handle form field changes
   const handleChange = (
     e: ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -66,6 +69,7 @@ export default function Contact() {
     }));
   };
 
+  // Submit inquiry to Supabase
   const handleSubmit = async (
     e: FormEvent<HTMLFormElement>
   ): Promise<void> => {
@@ -93,7 +97,9 @@ export default function Contact() {
         priority: "normal",
       });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       setSubmitted(true);
       setFormData(initialFormData);
@@ -108,9 +114,11 @@ export default function Contact() {
     }
   };
 
+  // Close contact form
   const closeForm = (): void => {
     setShowForm(false);
     setSubmitted(false);
+    setSubmitError("");
   };
 
   return (
@@ -152,8 +160,9 @@ export default function Contact() {
 
       {/* CONTACT LAYOUT */}
       <div
-        className={`contact-layout ${showForm ? "form-open" : "form-closed"
-          }`}
+        className={`contact-layout ${
+          showForm ? "form-open" : "form-closed"
+        }`}
       >
 
         {/* CONTACT INFORMATION */}
@@ -179,7 +188,10 @@ export default function Contact() {
             <button
               type="button"
               className="contact-open-form"
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setShowForm(true);
+                setSubmitError("");
+              }}
             >
               SEND AN INQUIRY
               <ArrowUpRight size={18} />
@@ -231,9 +243,12 @@ export default function Contact() {
 
               <div>
                 <span>OUR LOCATION</span>
+
                 <strong>
-                  {company.address.city}, {company.address.state}
+                  {company.address.city},{" "}
+                  {company.address.state}
                 </strong>
+
                 <small>{fullAddress}</small>
               </div>
             </div>
@@ -251,6 +266,7 @@ export default function Contact() {
         {showForm && (
           <div className="contact-form-wrap">
 
+            {/* FORM HEADER */}
             <div className="contact-form-header">
               <div>
                 <span>01 — YOUR DETAILS</span>
@@ -272,33 +288,12 @@ export default function Contact() {
               <div className="contact-success">
                 <CheckCircle2 size={40} />
 
-                <div className="contact-success">
-                  <CheckCircle2 size={40} />
-
-                  <h3>Thank you for reaching out!</h3>
-
-                  <p>
-                    Your inquiry has been successfully submitted.
-                    Our team will review your requirements and get
-                    back to you shortly.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubmitted(false);
-                      setShowForm(false);
-                    }}
-                  >
-                    DONE
-                    <ArrowUpRight size={16} />
-                  </button>
-                </div>
+                <h3>Thank you for reaching out!</h3>
 
                 <p>
-                  Your email application should open with
-                  your inquiry. Send the prepared email to
-                  complete your request.
+                  Your inquiry has been successfully submitted.
+                  Our team will review your requirements and get
+                  back to you shortly.
                 </p>
 
                 <button
@@ -306,6 +301,7 @@ export default function Contact() {
                   onClick={() => {
                     setSubmitted(false);
                     setFormData(initialFormData);
+                    setSubmitError("");
                     setShowForm(false);
                   }}
                 >
@@ -336,6 +332,7 @@ export default function Contact() {
                       placeholder="Full name"
                       value={formData.name}
                       onChange={handleChange}
+                      autoComplete="name"
                       required
                     />
                   </div>
@@ -352,6 +349,7 @@ export default function Contact() {
                       placeholder="you@company.com"
                       value={formData.email}
                       onChange={handleChange}
+                      autoComplete="email"
                       required
                     />
                   </div>
@@ -373,6 +371,7 @@ export default function Contact() {
                       placeholder="Company name"
                       value={formData.company}
                       onChange={handleChange}
+                      autoComplete="organization"
                     />
                   </div>
 
@@ -388,6 +387,7 @@ export default function Contact() {
                       placeholder="+91 00000 00000"
                       value={formData.phone}
                       onChange={handleChange}
+                      autoComplete="tel"
                     />
                   </div>
 
@@ -432,11 +432,17 @@ export default function Contact() {
                     required
                   />
                 </div>
+
+                {/* ERROR MESSAGE */}
                 {submitError && (
-                  <p className="contact-submit-error" role="alert">
+                  <p
+                    className="contact-submit-error"
+                    role="alert"
+                  >
                     {submitError}
                   </p>
                 )}
+
                 {/* FORM FOOTER */}
                 <div className="contact-form-footer">
                   <p>
@@ -449,7 +455,9 @@ export default function Contact() {
                     className="contact-submit"
                     disabled={submitting}
                   >
-                    {submitting ? "SUBMITTING..." : "SEND INQUIRY"}
+                    {submitting
+                      ? "SUBMITTING..."
+                      : "SEND INQUIRY"}
 
                     {!submitting && <Send size={15} />}
                   </button>
@@ -465,7 +473,8 @@ export default function Contact() {
       {/* BOTTOM LINE */}
       <div className="contact-bottomline">
         <span>
-          {company.name.toUpperCase()} / {company.address.country.toUpperCase()}
+          {company.name.toUpperCase()} /{" "}
+          {company.address.country.toUpperCase()}
         </span>
 
         <span>

@@ -138,7 +138,7 @@ export default function Dashboard() {
       {/* WELCOME BANNER */}
       <section className="welcome-banner">
         <div className="welcome-content">
-          <span>SHREEM SOLUTIONS · ADMIN WORKSPACE</span>
+          <span>SHREEM SOLUTION · ADMIN WORKSPACE</span>
 
           <h2>Beyond Every Border.</h2>
 
@@ -346,7 +346,7 @@ export default function Dashboard() {
 
       {/* FOOTER */}
       <footer className="admin-footer">
-        <span>SHREEM SOLUTIONS</span>
+        <span>SHREEM SOLUTION</span>
         <span>Global Trade Management Workspace</span>
       </footer>
     </div>

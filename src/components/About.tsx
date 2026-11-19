@@ -76,7 +76,7 @@ export default function About() {
           </h2>
 
           <p className="about-description">
-            Shreem Solutions connects global buyers and suppliers with
+            SHREEM SOLUTION connects global buyers and suppliers with
             quality products across agricultural, industrial and commercial
             sectors. We simplify international trade by helping businesses
             source the right products, connect with reliable suppliers and

@@ -6,9 +6,15 @@ import {
   ArrowUpRight,
   CalendarDays,
   Search,
+  RefreshCw,
 } from "lucide-react";
-import { supabase } from "../lib/supabase";
 
+import { supabase } from "../lib/supabase";
+import {
+  cachedFetch,
+  CACHE_KEYS,
+  invalidateCache,
+} from "../lib/cache";
 
 type BlogCategory = {
   id: string;
@@ -29,6 +35,13 @@ type BlogPost = {
   category: BlogCategory | null;
 };
 
+type BlogData = {
+  posts: BlogPost[];
+  categories: BlogCategory[];
+};
+
+const BLOG_CACHE_TTL = 5 * 60 * 1000;
+
 export default function Blog() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [categories, setCategories] = useState<BlogCategory[]>([]);
@@ -36,72 +49,107 @@ export default function Blog() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    let active = true;
+
     const fetchBlog = async () => {
       setLoading(true);
       setError("");
 
-      const [postsResult, categoriesResult] = await Promise.all([
-        supabase
-          .from("blog_posts")
-          .select(`
-            id,
-            title,
-            slug,
-            excerpt,
-            content,
-            featured_image_url,
-            published_at,
-            tags,
-            category_id,
-            category:blog_categories (
-              id,
-              name,
-              slug
-            )
-          `)
-          .eq("status", "published")
-          .order("published_at", { ascending: false }),
+      try {
+        const blogData = await cachedFetch<BlogData>(
+          CACHE_KEYS.blogs,
+          async () => {
+            const [postsResult, categoriesResult] = await Promise.all([
+              supabase
+                .from("blog_posts")
+                .select(`
+                  id,
+                  title,
+                  slug,
+                  excerpt,
+                  content,
+                  featured_image_url,
+                  published_at,
+                  tags,
+                  category_id,
+                  category:blog_categories (
+                    id,
+                    name,
+                    slug
+                  )
+                `)
+                .eq("status", "published")
+                .order("published_at", { ascending: false }),
 
-        supabase
-          .from("blog_categories")
-          .select("id, name, slug")
-          .order("name", { ascending: true }),
-      ]);
+              supabase
+                .from("blog_categories")
+                .select("id, name, slug")
+                .order("name", { ascending: true }),
+            ]);
 
-      if (postsResult.error) {
-        setError(postsResult.error.message);
-      } else {
-        const formattedPosts = (postsResult.data ?? []).map((post) => ({
-          ...post,
-          category: Array.isArray(post.category)
-            ? post.category[0] ?? null
-            : post.category,
-        })) as BlogPost[];
+            if (postsResult.error) {
+              throw postsResult.error;
+            }
 
-        setPosts(formattedPosts);
+            if (categoriesResult.error) {
+              throw categoriesResult.error;
+            }
+
+            const formattedPosts = (postsResult.data ?? []).map((post) => ({
+              ...post,
+              category: Array.isArray(post.category)
+                ? post.category[0] ?? null
+                : post.category,
+              tags: post.tags ?? [],
+            })) as BlogPost[];
+
+            return {
+              posts: formattedPosts,
+              categories: categoriesResult.data ?? [],
+            };
+          },
+          BLOG_CACHE_TTL
+        );
+
+        if (!active) return;
+
+        setPosts(blogData.posts);
+        setCategories(blogData.categories);
+      } catch (fetchError) {
+        console.error("Blog fetch error:", fetchError);
+
+        if (active) {
+          setError("Unable to load articles. Please try again later.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-
-      if (categoriesResult.error) {
-        console.error("Blog categories:", categoriesResult.error.message);
-      } else {
-        setCategories(categoriesResult.data ?? []);
-      }
-
-      setLoading(false);
     };
 
     fetchBlog();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [retryCount]);
+
+  const handleRetry = () => {
+    invalidateCache(CACHE_KEYS.blogs);
+    setRetryCount((count) => count + 1);
+  };
 
   const filteredPosts = useMemo(() => {
+    const query = search.toLowerCase().trim();
+
     return posts.filter((post) => {
       const matchesCategory =
         activeCategory === "all" ||
         post.category?.slug === activeCategory;
-
-      const query = search.toLowerCase().trim();
 
       const matchesSearch =
         !query ||
@@ -114,7 +162,6 @@ export default function Blog() {
   }, [posts, activeCategory, search]);
 
   const featuredPost = filteredPosts[0];
-
   const remainingPosts = filteredPosts.slice(1);
 
   const formatDate = (date: string | null) => {
@@ -164,6 +211,7 @@ export default function Blog() {
           <div className="blog-toolbar">
             <div className="blog-categories">
               <button
+                type="button"
                 className={activeCategory === "all" ? "active" : ""}
                 onClick={() => setActiveCategory("all")}
               >
@@ -172,6 +220,7 @@ export default function Blog() {
 
               {categories.map((category) => (
                 <button
+                  type="button"
                   key={category.id}
                   className={
                     activeCategory === category.slug ? "active" : ""
@@ -185,6 +234,7 @@ export default function Blog() {
 
             <label className="blog-search">
               <Search size={17} />
+
               <input
                 type="search"
                 placeholder="Search articles..."
@@ -202,7 +252,16 @@ export default function Blog() {
 
           {!loading && error && (
             <div className="blog-message blog-error">
-              Unable to load articles. Please try again later.
+              <p>{error}</p>
+
+              <button
+                type="button"
+                className="blog-back-link"
+                onClick={handleRetry}
+              >
+                <RefreshCw size={16} />
+                Try again
+              </button>
             </div>
           )}
 
@@ -241,7 +300,9 @@ export default function Blog() {
                     <span>
                       {featuredPost.category?.name ?? "Global Trade"}
                     </span>
+
                     <span className="blog-meta-dot" />
+
                     <span>
                       <CalendarDays size={14} />
                       {formatDate(featuredPost.published_at)}
@@ -252,7 +313,7 @@ export default function Blog() {
 
                   <p>
                     {featuredPost.excerpt ||
-                      "Explore insights and perspectives from Shreem Solutions."}
+                      "Explore insights and perspectives from SHREEM SOLUTION."}
                   </p>
 
                   <span className="blog-read-link">
@@ -270,9 +331,7 @@ export default function Blog() {
                     <h2>More perspectives.</h2>
                   </div>
 
-                  <span>
-                    {filteredPosts.length} ARTICLES
-                  </span>
+                  <span>{filteredPosts.length} ARTICLES</span>
                 </div>
               )}
 
@@ -306,7 +365,9 @@ export default function Blog() {
                         <span>
                           {post.category?.name ?? "Global Trade"}
                         </span>
+
                         <span className="blog-meta-dot" />
+
                         <span>{formatDate(post.published_at)}</span>
                       </div>
 

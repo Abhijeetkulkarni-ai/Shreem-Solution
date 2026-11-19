@@ -34,7 +34,7 @@ type SiteSettings = {
 };
 
 const initialSettings: SiteSettings = {
-  company_name: "Shreem Solutions",
+  company_name: "SHREEM SOLUTION",
   tagline: "Beyond Every Border.",
   description: "",
   email: "",
@@ -281,7 +281,7 @@ export default function Setting() {
           </div>
 
           <div className="settings-grid">
-            {input("SEO Page Title", "seo_title", "Shreem Solutions | Global Trade")}
+            {input("SEO Page Title", "seo_title", "SHREEM SOLUTION | Global Trade")}
             {textarea(
               "SEO Meta Description",
               "seo_description",

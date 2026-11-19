@@ -98,8 +98,30 @@ Deno.serve(async (req) => {
       actorProfile.role !== "super_admin" ||
       actorProfile.is_active !== true
     ) {
+      console.error("AUTHORIZATION CHECK FAILED:", {
+        actorId: actor.id,
+        profileId: actorProfile?.id ?? null,
+        role: actorProfile?.role ?? null,
+        isActive: actorProfile?.is_active ?? null,
+        profileError: profileError
+          ? {
+              code: profileError.code,
+              message: profileError.message,
+            }
+          : null,
+      });
+
       return jsonResponse(
-        { error: "Only an active Super Admin can manage users." },
+        {
+          error: "Only an active Super Admin can manage users.",
+          diagnostic: {
+            actorId: actor.id,
+            profileId: actorProfile?.id ?? null,
+            role: actorProfile?.role ?? null,
+            isActive: actorProfile?.is_active ?? null,
+            profileError: profileError?.message ?? null,
+          },
+        },
         403,
       );
     }

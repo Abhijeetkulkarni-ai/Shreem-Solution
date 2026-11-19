@@ -1,6 +1,6 @@
 
 export const siteConfig = {
-  name: "SHREEM SOLUTIONS",
+  name: "SHREEM SOLUTION",
   tagline: "Moving Business Across Borders, Seamlessly.",
   description:
     "End-to-end import and export solutions for products across multiple industries — from agricultural commodities to industrial machinery, connecting your business to global markets.",

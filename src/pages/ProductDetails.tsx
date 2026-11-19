@@ -6,8 +6,17 @@ import {
   ArrowRight,
   Globe2,
   Package,
+  ChevronRight,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
+
 import { supabase } from "../lib/supabase";
+import {
+  cachedFetch,
+  CACHE_KEYS,
+  invalidateCache,
+} from "../lib/cache";
 
 interface ProductImage {
   id: string;
@@ -30,6 +39,14 @@ interface Product {
   category_id: string | null;
 }
 
+interface ProductDetailsData {
+  product: Product;
+  images: ProductImage[];
+  categoryName: string;
+}
+
+const PRODUCT_CACHE_TTL = 5 * 60 * 1000;
+
 export default function ProductDetails() {
   const { slug } = useParams<{ slug: string }>();
 
@@ -39,6 +56,7 @@ export default function ProductDetails() {
   const [activeImage, setActiveImage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -52,67 +70,90 @@ export default function ProductDetails() {
 
       setLoading(true);
       setError("");
+      setActiveImage("");
 
       try {
-        const { data, error: productError } = await supabase
-          .from("products")
-          .select(`
-            id,
-            name,
-            slug,
-            short_description,
-            description,
-            specifications,
-            origin_country,
-            target_markets,
-            featured_image_url,
-            category_id
-          `)
-          .eq("slug", slug)
-          .eq("status", "published")
-          .maybeSingle();
-
-        if (productError) throw productError;
-
-        if (!data) {
-          if (isMounted) setError("This product is unavailable.");
-          return;
-        }
-
-        const { data: imageData, error: imageError } = await supabase
-          .from("product_images")
-          .select("id, image_url, alt_text, sort_order, is_featured")
-          .eq("product_id", data.id)
-          .order("sort_order", { ascending: true });
-
-        if (imageError) throw imageError;
-
-        let category = "";
-
-        if (data.category_id) {
-          const { data: categoryData, error: categoryError } =
-            await supabase
-              .from("product_categories")
-              .select("name")
-              .eq("id", data.category_id)
+        const result = await cachedFetch<ProductDetailsData | null>(
+          `${CACHE_KEYS.productDetails}${slug}`,
+          async () => {
+            const { data, error: productError } = await supabase
+              .from("products")
+              .select(`
+                id,
+                name,
+                slug,
+                short_description,
+                description,
+                specifications,
+                origin_country,
+                target_markets,
+                featured_image_url,
+                category_id
+              `)
+              .eq("slug", slug)
+              .eq("status", "published")
               .maybeSingle();
 
-          if (categoryError) throw categoryError;
-          category = categoryData?.name || "";
-        }
+            if (productError) throw productError;
+
+            if (!data) return null;
+
+            const [
+              { data: imageData, error: imageError },
+              { data: categoryData, error: categoryError },
+            ] = await Promise.all([
+              supabase
+                .from("product_images")
+                .select("id, image_url, alt_text, sort_order, is_featured")
+                .eq("product_id", data.id)
+                .order("sort_order", { ascending: true }),
+
+              data.category_id
+                ? supabase
+                    .from("product_categories")
+                    .select("name")
+                    .eq("id", data.category_id)
+                    .maybeSingle()
+                : Promise.resolve({
+                    data: null,
+                    error: null,
+                  }),
+            ]);
+
+            if (imageError) throw imageError;
+            if (categoryError) throw categoryError;
+
+            return {
+              product: {
+                ...data,
+                specifications: data.specifications ?? {},
+                target_markets: data.target_markets ?? [],
+              } as Product,
+              images: (imageData ?? []) as ProductImage[],
+              categoryName: categoryData?.name ?? "",
+            };
+          },
+          PRODUCT_CACHE_TTL
+        );
 
         if (!isMounted) return;
 
-        const loadedImages = imageData || [];
+        if (!result) {
+          setProduct(null);
+          setImages([]);
+          setCategoryName("");
+          setError("This product is unavailable.");
+          return;
+        }
 
-        setProduct(data as Product);
-        setImages(loadedImages);
-        setCategoryName(category);
+        setProduct(result.product);
+        setImages(result.images);
+        setCategoryName(result.categoryName);
 
         const featured =
-          loadedImages.find((image) => image.is_featured)?.image_url ||
-          data.featured_image_url ||
-          loadedImages[0]?.image_url ||
+          result.images.find((image) => image.is_featured)?.image_url ||
+          result.product.featured_image_url ||
+          result.images[0]?.image_url ||
           "";
 
         setActiveImage(featured);
@@ -120,10 +161,12 @@ export default function ProductDetails() {
         console.error("Product detail error:", err);
 
         if (isMounted) {
-          setError("Unable to load this product. Please try again later.");
+          setError("Unable to load this product. Please try again.");
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -132,12 +175,28 @@ export default function ProductDetails() {
     return () => {
       isMounted = false;
     };
-  }, [slug]);
+  }, [slug, retryCount]);
+
+  const handleRetry = () => {
+    if (slug) {
+      invalidateCache(`${CACHE_KEYS.productDetails}${slug}`);
+    }
+
+    setRetryCount((count) => count + 1);
+  };
 
   if (loading) {
     return (
       <main className="product-detail-state">
-        <p>Loading product...</p>
+        <div className="product-detail-loading">
+          <div className="product-loading-image" />
+
+          <div className="product-loading-content">
+            <div />
+            <div />
+            <div />
+          </div>
+        </div>
       </main>
     );
   }
@@ -145,12 +204,30 @@ export default function ProductDetails() {
   if (error || !product) {
     return (
       <main className="product-detail-state">
-        <Package size={34} />
+        <Package size={42} />
+
+        <span className="product-detail-eyebrow">
+          PRODUCT INFORMATION
+        </span>
+
         <h1>Product unavailable</h1>
+
         <p>{error || "We couldn't find this product."}</p>
-        <Link to="/" className="product-back-link">
+
+        {error.includes("Unable to load") && (
+          <button
+            type="button"
+            className="product-back-link"
+            onClick={handleRetry}
+          >
+            <RefreshCw size={16} />
+            Try again
+          </button>
+        )}
+
+        <Link to="/products" className="product-back-link">
           <ArrowLeft size={16} />
-          Back to homepage
+          Explore all products
         </Link>
       </main>
     );
@@ -160,65 +237,142 @@ export default function ProductDetails() {
 
   const galleryImages = [
     ...(product.featured_image_url &&
-    !images.some((image) => image.image_url === product.featured_image_url)
-      ? [{
-          id: "featured",
-          image_url: product.featured_image_url,
-          alt_text: product.name,
-          sort_order: -1,
-          is_featured: true,
-        }]
+    !images.some(
+      (image) => image.image_url === product.featured_image_url
+    )
+      ? [
+          {
+            id: "featured",
+            image_url: product.featured_image_url,
+            alt_text: product.name,
+            sort_order: -1,
+            is_featured: true,
+          },
+        ]
       : []),
     ...images,
   ];
 
+  const currentImageIndex = galleryImages.findIndex(
+    (image) => image.image_url === activeImage
+  );
+
+  const formatSpecification = (value: unknown): string => {
+    if (value === null || value === undefined) return "";
+
+    if (typeof value === "boolean") {
+      return value ? "Yes" : "No";
+    }
+
+    if (Array.isArray(value)) {
+      return value.join(", ");
+    }
+
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  };
+
+  const enquiryLink = "/#contact";
+
   return (
     <main className="product-detail-page">
       <div className="product-detail-container">
-        <Link to="/" className="product-back-link">
-          <ArrowLeft size={16} />
-          Back to homepage
-        </Link>
 
-        <div className="product-detail-grid">
+        <div className="product-detail-breadcrumb">
+          <Link to="/">HOME</Link>
+          <ChevronRight size={13} />
+
+          <Link to="/products">PRODUCTS</Link>
+          <ChevronRight size={13} />
+
+          <span>{product.name}</span>
+        </div>
+
+        <section className="product-detail-grid">
+
           <div className="product-gallery">
             <div className="product-main-image">
+
               {activeImage ? (
-                <img src={activeImage} alt={product.name} />
+                <img
+                  key={activeImage}
+                  src={activeImage}
+                  alt={product.name}
+                />
               ) : (
                 <div className="product-image-placeholder">
-                  <Package size={42} />
+                  <Package size={48} />
                   <span>Image coming soon</span>
                 </div>
               )}
+
+              <span className="product-image-index">
+                SHREEM SOLUTION / PRODUCT
+              </span>
+
+              {categoryName && (
+                <span className="product-image-category">
+                  {categoryName}
+                </span>
+              )}
+
             </div>
 
             {galleryImages.length > 1 && (
-              <div className="product-thumbnail-list">
-                {galleryImages.map((image) => (
-                  <button
-                    type="button"
-                    key={image.id}
-                    className={`product-thumbnail ${
-                      activeImage === image.image_url ? "active" : ""
-                    }`}
-                    onClick={() => setActiveImage(image.image_url)}
-                    aria-label={`View ${image.alt_text || product.name}`}
-                  >
-                    <img
-                      src={image.image_url}
-                      alt={image.alt_text || product.name}
-                    />
-                  </button>
-                ))}
+              <div className="product-thumbnail-section">
+
+                <div className="product-thumbnail-heading">
+                  <span>PRODUCT GALLERY</span>
+
+                  <span>
+                    {currentImageIndex >= 0
+                      ? currentImageIndex + 1
+                      : 1}{" "}
+                    / {galleryImages.length}
+                  </span>
+                </div>
+
+                <div className="product-thumbnail-list">
+                  {galleryImages.map((image, index) => (
+                    <button
+                      type="button"
+                      key={image.id}
+                      className={`product-thumbnail ${
+                        activeImage === image.image_url ? "active" : ""
+                      }`}
+                      onClick={() => setActiveImage(image.image_url)}
+                      aria-label={`View image ${index + 1}`}
+                      aria-pressed={activeImage === image.image_url}
+                    >
+                      <img
+                        src={image.image_url}
+                        alt={image.alt_text || product.name}
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+
               </div>
             )}
+
           </div>
 
           <div className="product-detail-info">
-            <span className="product-detail-eyebrow">
-              {categoryName || "OUR PRODUCTS"}
-            </span>
+
+            <div className="product-detail-topline">
+              <span className="product-detail-eyebrow">
+                {categoryName || "OUR PRODUCT PORTFOLIO"}
+              </span>
+
+              <span className="product-availability">
+                <CheckCircle2 size={14} />
+                Available for enquiry
+              </span>
+            </div>
 
             <h1>{product.name}</h1>
 
@@ -228,63 +382,129 @@ export default function ProductDetails() {
               </p>
             )}
 
+            <div className="product-detail-divider" />
+
             {product.description && (
               <div className="product-detail-description">
-                {product.description}
+                <h3>About this product</h3>
+                <p>{product.description}</p>
               </div>
             )}
 
             <div className="product-detail-meta">
+
               {product.origin_country && (
-                <div>
-                  <span>COUNTRY OF ORIGIN</span>
-                  <strong>{product.origin_country}</strong>
+                <div className="product-meta-item">
+                  <div className="product-meta-icon">
+                    <Globe2 size={18} />
+                  </div>
+
+                  <div>
+                    <span>COUNTRY OF ORIGIN</span>
+                    <strong>{product.origin_country}</strong>
+                  </div>
                 </div>
               )}
 
               {product.target_markets?.length > 0 && (
-                <div>
-                  <span>TARGET MARKETS</span>
-                  <strong>{product.target_markets.join(", ")}</strong>
+                <div className="product-meta-item">
+                  <div className="product-meta-icon">
+                    <Package size={18} />
+                  </div>
+
+                  <div>
+                    <span>TARGET MARKETS</span>
+                    <strong>
+                      {product.target_markets.join(", ")}
+                    </strong>
+                  </div>
                 </div>
               )}
+
             </div>
 
-            <a href="/#contact" className="product-detail-enquiry">
-              Enquire about this product
-              <ArrowRight size={17} />
-            </a>
+            <div className="product-enquiry-panel">
+              <span>INTERESTED IN THIS PRODUCT?</span>
 
-            <p className="product-detail-note">
-              <Globe2 size={15} />
-              Connecting your business with global supply opportunities.
-            </p>
+              <h3>
+                Let's discuss your
+                <br />
+                sourcing requirements.
+              </h3>
+
+              <Link
+                to={enquiryLink}
+                className="product-detail-enquiry"
+                state={{ productName: product.name }}
+              >
+                Enquire about this product
+                <ArrowRight size={18} />
+              </Link>
+
+              <p>
+                Our team can assist with product details, availability
+                and international trade enquiries.
+              </p>
+            </div>
+
+            <div className="product-detail-note">
+              <Globe2 size={16} />
+              Connecting businesses with global supply opportunities.
+            </div>
+
           </div>
-        </div>
+
+        </section>
 
         {Object.keys(specifications).length > 0 && (
           <section className="product-specifications">
-            <span className="product-detail-eyebrow">
-              PRODUCT INFORMATION
-            </span>
-            <h2>Specifications</h2>
+
+            <div className="product-specifications-heading">
+              <div>
+                <span className="product-detail-eyebrow">
+                  PRODUCT INFORMATION
+                </span>
+
+                <h2>
+                  Specifications<span>.</span>
+                </h2>
+              </div>
+
+              <p>
+                Important product details and technical information.
+              </p>
+            </div>
 
             <div className="product-specifications-grid">
-              {Object.entries(specifications).map(([key, value]) => (
-                <div className="product-specification" key={key}>
-                  <span>
-                    {key.replace(/[_-]/g, " ")}
-                  </span>
-                  <strong>
-                    {typeof value === "object"
-                      ? JSON.stringify(value)
-                      : String(value)}
-                  </strong>
-                </div>
-              ))}
+              {Object.entries(specifications)
+                .filter(([, value]) => value !== null && value !== undefined)
+                .map(([key, value]) => (
+                  <div className="product-specification" key={key}>
+                    <span>
+                      {key
+                        .replace(/[_-]/g, " ")
+                        .replace(/\b\w/g, (char) => char.toUpperCase())}
+                    </span>
+
+                    <strong>
+                      {formatSpecification(value)}
+                    </strong>
+                  </div>
+                ))}
             </div>
+
           </section>
         )}
+
+        <div className="product-detail-footer">
+          <Link to="/products">
+            <ArrowLeft size={17} />
+            Back to product catalogue
+          </Link>
+
+          <span>SHREEM SOLUTION · GLOBAL TRADE</span>
+        </div>
+
       </div>
     </main>
   );

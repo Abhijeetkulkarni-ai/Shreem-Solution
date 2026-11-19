@@ -5,7 +5,7 @@ import { ArrowUpRight, Plus } from "lucide-react";
 const faqItems = [
   {
     number: "01",
-    question: "What products does Shreem Solutions deal in?",
+    question: "What products does SHREEM SOLUTION deal in?",
     answer:
       "We work across diverse product categories, including agricultural commodities, industrial goods, machinery, chemicals, textiles, and specialized equipment. Product availability and specifications depend on your requirements and sourcing needs.",
   },
@@ -47,7 +47,7 @@ const faqItems = [
   },
   {
     number: "08",
-    question: "How do I start a business partnership with Shreem Solutions?",
+    question: "How do I start a business partnership with SHREEM SOLUTION?",
     answer:
       "Get in touch through our contact section and tell us whether you are a buyer, supplier, or business looking for sourcing support. Share your requirements so we can explore potential opportunities together.",
   },
@@ -81,7 +81,7 @@ export default function FAQ() {
 
           <p>
             Everything you need to know about working with
-            Shreem Solutions and making your next global
+            SHREEM SOLUTION and making your next global
             trade opportunity happen.
           </p>
 
@@ -93,7 +93,7 @@ export default function FAQ() {
           </a>
 
           <div className="faq-side-note">
-            <span>SHREEM SOLUTIONS</span>
+            <span>SHREEM SOLUTION</span>
             <span>BEYOND EVERY BORDER.</span>
           </div>
         </div>

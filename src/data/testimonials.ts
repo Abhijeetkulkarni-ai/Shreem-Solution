@@ -21,7 +21,7 @@ export const testimonials: Testimonial[] = [
   {
     number: "02",
     quote:
-      "Add an approved client review describing how Shreem Solutions supported their sourcing or supplier coordination requirements.",
+      "Add an approved client review describing how SHREEM SOLUTION supported their sourcing or supplier coordination requirements.",
     name: "Client Name",
     company: "Company Name",
     location: "Country",

@@ -23,7 +23,13 @@ import {
 } from "lucide-react";
 
 import { supabase } from "../lib/supabase";
+import {
+  cachedFetch,
+  invalidateCacheGroup,
+} from "../lib/cache";
+
 import "./blog.css";
+
 /* =========================================
    TYPES
 ========================================= */
@@ -67,6 +73,15 @@ type BlogForm = {
   seo_title: string;
   seo_description: string;
 };
+
+type BlogData = {
+  posts: BlogPost[];
+  categories: Category[];
+};
+
+const BLOG_CACHE_KEY = "blogs";
+const BLOG_DETAIL_CACHE_PREFIX = "blog-details:";
+const BLOG_CACHE_TTL = 5 * 60 * 1000;
 
 const emptyForm: BlogForm = {
   title: "",
@@ -121,6 +136,15 @@ function dateLabel(value: string | null) {
 }
 
 /* =========================================
+   CACHE INVALIDATION
+========================================= */
+
+function invalidateBlogCache() {
+  invalidateCacheGroup(BLOG_CACHE_KEY);
+  invalidateCacheGroup(BLOG_DETAIL_CACHE_PREFIX);
+}
+
+/* =========================================
    COMPONENT
 ========================================= */
 
@@ -143,31 +167,46 @@ export default function Blogs() {
   const [form, setForm] = useState<BlogForm>(emptyForm);
 
   /* =========================================
-     FETCH DATA
+     FETCH DATA WITH CACHE
   ========================================= */
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError("");
 
     try {
-      const [postsResult, categoriesResult] = await Promise.all([
-        supabase
-          .from("blog_posts")
-          .select("*")
-          .order("created_at", { ascending: false }),
+      if (forceRefresh) {
+        invalidateBlogCache();
+      }
 
-        supabase
-          .from("blog_categories")
-          .select("*")
-          .order("name"),
-      ]);
+      const result = await cachedFetch<BlogData>(
+        BLOG_CACHE_KEY,
+        async () => {
+          const [postsResult, categoriesResult] = await Promise.all([
+            supabase
+              .from("blog_posts")
+              .select("*")
+              .order("created_at", { ascending: false }),
 
-      if (postsResult.error) throw postsResult.error;
-      if (categoriesResult.error) throw categoriesResult.error;
+            supabase
+              .from("blog_categories")
+              .select("id, name, slug")
+              .order("name"),
+          ]);
 
-      setPosts((postsResult.data || []) as BlogPost[]);
-      setCategories((categoriesResult.data || []) as Category[]);
+          if (postsResult.error) throw postsResult.error;
+          if (categoriesResult.error) throw categoriesResult.error;
+
+          return {
+            posts: (postsResult.data || []) as BlogPost[],
+            categories: (categoriesResult.data || []) as Category[],
+          };
+        },
+        BLOG_CACHE_TTL
+      );
+
+      setPosts(result.posts);
+      setCategories(result.categories);
     } catch (err) {
       setError(
         err instanceof Error
@@ -402,6 +441,9 @@ export default function Blogs() {
         if (insertError) throw insertError;
       }
 
+      // Clear public blog caches after successful save.
+      invalidateBlogCache();
+
       setModalOpen(false);
       setEditingPost(null);
       setForm(emptyForm);
@@ -431,19 +473,26 @@ export default function Blogs() {
 
     setError("");
 
-    const { error: deleteError } = await supabase
-      .from("blog_posts")
-      .delete()
-      .eq("id", post.id);
+    try {
+      const { error: deleteError } = await supabase
+        .from("blog_posts")
+        .delete()
+        .eq("id", post.id);
 
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
+      if (deleteError) throw deleteError;
+
+      invalidateBlogCache();
+
+      setPosts((current) =>
+        current.filter((item) => item.id !== post.id)
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not delete article."
+      );
     }
-
-    setPosts((current) =>
-      current.filter((item) => item.id !== post.id)
-    );
   }
 
   /* =========================================
@@ -462,22 +511,29 @@ export default function Blogs() {
       return;
     }
 
-    const { data, error: categoryError } = await supabase
-      .from("blog_categories")
-      .insert({
-        name: name.trim(),
-        slug,
-      })
-      .select()
-      .single();
+    try {
+      const { data, error: categoryError } = await supabase
+        .from("blog_categories")
+        .insert({
+          name: name.trim(),
+          slug,
+        })
+        .select("id, name, slug")
+        .single();
 
-    if (categoryError) {
-      setError(categoryError.message);
-      return;
+      if (categoryError) throw categoryError;
+
+      invalidateBlogCache();
+
+      setCategories((current) => [...current, data as Category]);
+      updateField("category_id", data.id);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not create category."
+      );
     }
-
-    setCategories((current) => [...current, data as Category]);
-    updateField("category_id", data.id);
   }
 
   function categoryName(id: string | null) {
@@ -595,7 +651,7 @@ export default function Blogs() {
 
             <button
               className="blogs-refresh"
-              onClick={() => void fetchData()}
+              onClick={() => void fetchData(true)}
               title="Refresh"
               type="button"
             >
@@ -701,7 +757,11 @@ export default function Blogs() {
       {modalOpen && (
         <div
           className="blogs-overlay"
-          onMouseDown={closeModal}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeModal();
+            }
+          }}
         >
 
           <div
@@ -720,7 +780,7 @@ export default function Blogs() {
                 </h2>
 
                 <p>
-                  Write and manage your Shreem Solutions blog content.
+                  Write and manage your SHREEM SOLUTION blog content.
                 </p>
               </div>
 

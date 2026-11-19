@@ -1,6 +1,6 @@
 
 export const company = {
-  name: "Shreem Solutions",
+  name: "SHREEM SOLUTION",
   short: "Shreem",
 
 

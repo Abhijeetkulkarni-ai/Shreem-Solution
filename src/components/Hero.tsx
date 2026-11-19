@@ -81,7 +81,7 @@ export default function Hero() {
       </div>
 
       <div className="hero-stamp">
-        <span>SHREEM SOLUTIONS</span>
+        <span>SHREEM SOLUTION</span>
         <strong>GLOBAL TRADE</strong>
         <small>BEYOND BORDERS</small>
       </div>

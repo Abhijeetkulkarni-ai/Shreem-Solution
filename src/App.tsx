@@ -19,16 +19,16 @@ import Contact from "./components/Contact";
 import Blog from "./components/Blog";
 import Footer from "./components/Footer";
 
+import ProductsPage from "./pages/ProductsPage";
 import ProductDetails from "./pages/ProductDetails";
 import BlogPost from "./pages/BlogPost";
 import VisitorTracker from "./components/VisitorTracker";
+import ScrollToTop from "./components/ScrollToTop";
 
 function HomePage() {
   return (
     <>
       <Hero />
-      
-
       <Certifications />
       <About />
       <Services />
@@ -46,8 +46,10 @@ function HomePage() {
 function App() {
   return (
     <BrowserRouter>
+    <ScrollToTop />
       <Navbar />
-<VisitorTracker />
+      <VisitorTracker />
+
       <Routes>
         {/* Homepage */}
         <Route
@@ -55,7 +57,13 @@ function App() {
           element={<HomePage />}
         />
 
-        {/* Product Details */}
+        {/* All Products Catalogue */}
+        <Route
+          path="/products"
+          element={<ProductsPage />}
+        />
+
+        {/* Individual Product Details */}
         <Route
           path="/products/:slug"
           element={<ProductDetails />}

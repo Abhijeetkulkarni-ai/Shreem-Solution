@@ -70,7 +70,7 @@ export default function Testimonials() {
       </div>
 
       <div className="testimonials-bottomline">
-        <span>SHREEM SOLUTIONS</span>
+        <span>SHREEM SOLUTION</span>
         <span>CONNECTING MARKETS. CREATING OPPORTUNITIES.</span>
       </div>
     </section>

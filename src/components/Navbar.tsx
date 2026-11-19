@@ -1,5 +1,7 @@
+
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const navLinks = [
   { label: "Home", href: "#home" },
@@ -15,20 +17,52 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState("home");
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isHomePage = location.pathname === "/";
+
+  const isProductsPage =
+    location.pathname === "/products" ||
+    location.pathname.startsWith("/products/");
+
+  const closeMenu = () => setMenuOpen(false);
+
+  const navigateToSection = (href: string) => {
+    closeMenu();
+
+    if (!isHomePage) {
+      navigate(`/${href}`);
+      return;
+    }
+
+    const sectionId = href.slice(1);
+    const section = document.getElementById(sectionId);
+
+    if (section) {
+      section.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      window.history.replaceState(null, "", `/${href}`);
+    }
+  };
+
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 40);
 
+      if (!isHomePage) return;
+
       const sections = navLinks
-        .map((link) => document.querySelector(link.href))
-        .filter((section): section is Element => section !== null);
+        .map((link) => document.getElementById(link.href.slice(1)))
+        .filter((section): section is HTMLElement => section !== null);
 
       let currentSection = "home";
 
       sections.forEach((section) => {
-        const sectionTop = section.getBoundingClientRect().top;
-
-        if (sectionTop <= 150) {
+        if (section.getBoundingClientRect().top <= 150) {
           currentSection = section.id;
         }
       });
@@ -37,11 +71,11 @@ export default function Navbar() {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") closeMenu();
     };
 
     const handleResize = () => {
-      if (window.innerWidth > 900) setMenuOpen(false);
+      if (window.innerWidth > 900) closeMenu();
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -55,20 +89,33 @@ export default function Navbar() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleResize);
     };
-  }, []);
+  }, [isHomePage]);
 
-  const closeMenu = () => setMenuOpen(false);
+  useEffect(() => {
+    if (isHomePage && location.hash) {
+      const sectionId = location.hash.slice(1);
+
+      requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    } else if (!isHomePage) {
+      setActiveSection("");
+    }
+  }, [isHomePage, location.hash, location.pathname]);
 
   return (
     <header className={`navbar ${scrolled ? "navbar-scrolled" : ""}`}>
-      <a href="#home" className="brand" onClick={closeMenu}>
+      <Link to="/" className="brand" onClick={closeMenu}>
         <img
           src="/images/shreem-logo.png"
-          alt="Shreem Solutions"
+          alt="SHREEM SOLUTION"
           className="brand-logo"
         />
-        <span className="brand-name">SHREEM SOLUTIONS</span>
-      </a>
+        <span className="brand-name">SHREEM SOLUTION</span>
+      </Link>
 
       <nav
         className={`nav-links ${menuOpen ? "nav-links-open" : ""}`}
@@ -78,15 +125,37 @@ export default function Navbar() {
         {navLinks.map((link) => {
           const sectionId = link.href.slice(1);
 
+          const isActive =
+            (link.label === "Products" && isProductsPage) ||
+            (isHomePage && activeSection === sectionId);
+
           return (
             <a
               key={link.href}
-              href={link.href}
-              className={activeSection === sectionId ? "active" : ""}
-              onClick={closeMenu}
-              aria-current={
-                activeSection === sectionId ? "location" : undefined
+              href={
+                link.label === "Products"
+                  ? "/products"
+                  : isHomePage
+                    ? link.href
+                    : `/${link.href}`
               }
+              className={isActive ? "active" : ""}
+              onClick={(event) => {
+                event.preventDefault();
+
+                if (link.label === "Products") {
+                  closeMenu();
+
+                  if (!isProductsPage) {
+                    navigate("/products");
+                  }
+
+                  return;
+                }
+
+                navigateToSection(link.href);
+              }}
+              aria-current={isActive ? "location" : undefined}
             >
               {link.label}
             </a>
@@ -94,16 +163,26 @@ export default function Navbar() {
         })}
 
         <a
-          href="#contact"
+          href={isHomePage ? "#contact" : "/#contact"}
           className="nav-mobile-cta"
-          onClick={closeMenu}
+          onClick={(event) => {
+            event.preventDefault();
+            navigateToSection("#contact");
+          }}
         >
           LET'S CONNECT
           <ArrowUpRight size={16} />
         </a>
       </nav>
 
-      <a href="#contact" className="nav-cta">
+      <a
+        href={isHomePage ? "#contact" : "/#contact"}
+        className="nav-cta"
+        onClick={(event) => {
+          event.preventDefault();
+          navigateToSection("#contact");
+        }}
+      >
         LET'S CONNECT
         <ArrowUpRight size={16} />
       </a>

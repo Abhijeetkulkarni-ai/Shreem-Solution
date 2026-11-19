@@ -61,7 +61,7 @@ function Login() {
         <div className="login-brand">
           <div className="brand-symbol">S</div>
           <div>
-            <strong>SHREEM SOLUTIONS</strong>
+            <strong>SHREEM SOLUTION</strong>
             <span>GLOBAL TRADE PARTNER</span>
           </div>
         </div>
@@ -118,7 +118,7 @@ function Login() {
       <section className="login-visual">
         <div className="visual-topline">
           <Globe2 size={17} />
-          <span>SHREEM SOLUTIONS</span>
+          <span>SHREEM SOLUTION</span>
         </div>
 
         <div className="visual-content">
@@ -303,6 +303,16 @@ function AppContent() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      console.log("SUPABASE SESSION CHECK:", {
+        error: error?.message ?? null,
+        userId: data.session?.user?.id ?? null,
+        email: data.session?.user?.email ?? null,
+        hasAccessToken: Boolean(data.session?.access_token),
+      });
+    });
+  }, []);
   useEffect(() => {
     let active = true;
 

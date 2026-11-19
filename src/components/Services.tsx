@@ -11,9 +11,9 @@ import {
 const services = [
   {
     number: "01",
-    title: "Export Solutions",
+    title: "Import Solutions",
     description:
-      "Connect quality products with international buyers and expand into global markets.",
+      " Find the right products, connect with reliable suppliers and simplify your international sourcing journey.",
     icon: Ship,
   },
   {
@@ -75,7 +75,7 @@ export default function Services() {
           <a href="#contact" className="import-feature">
             <div className="import-feature-top">
               <span className="import-label">
-                SHREEM SOLUTIONS / 01
+                SHREEM SOLUTION / 01
               </span>
               <span className="import-feature-index">GLOBAL TRADE</span>
             </div>
@@ -86,18 +86,18 @@ export default function Services() {
               </span>
 
               <h3>
-                Import
+                Export
                 <br />
                 <em>Solutions.</em>
               </h3>
 
               <p>
-                Find the right products, connect with reliable suppliers
-                and simplify your international sourcing journey.
+               
+                Connect quality products with international buyers and expand into global markets.
               </p>
 
               <span className="import-feature-action">
-                EXPLORE IMPORT SOLUTIONS
+                EXPLORE EXPORT SOLUTIONS
                 <span className="round-arrow import-arrow">
                   <ArrowRight size={18} />
                 </span>
@@ -181,7 +181,7 @@ export default function Services() {
         <footer className="services-footer">
           <span>02 / OUR SERVICES</span>
           <span>SOURCING · COORDINATION · GLOBAL TRADE</span>
-          <span>SHREEM SOLUTIONS</span>
+          <span>SHREEM SOLUTION</span>
         </footer>
       </div>
     </section>
