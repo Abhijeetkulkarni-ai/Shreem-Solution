@@ -19,11 +19,15 @@ import Contact from "./components/Contact";
 import Blog from "./components/Blog";
 import Footer from "./components/Footer";
 
+import TermsAndConditions from "./pages/TermsAndConditions";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import ProductsPage from "./pages/ProductsPage";
 import ProductDetails from "./pages/ProductDetails";
 import BlogPost from "./pages/BlogPost";
+
 import VisitorTracker from "./components/VisitorTracker";
 import ScrollToTop from "./components/ScrollToTop";
+
 
 function HomePage() {
   return (
@@ -46,39 +50,31 @@ function HomePage() {
 function App() {
   return (
     <BrowserRouter>
-    <ScrollToTop />
+      <ScrollToTop />
       <Navbar />
       <VisitorTracker />
 
       <Routes>
         {/* Homepage */}
+        <Route path="/" element={<HomePage />} />
+
+        {/* Products */}
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/:slug" element={<ProductDetails />} />
+
+        {/* Blog */}
+        <Route path="/blog" element={<Blog />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
+
+        {/* Legal Pages */}
         <Route
-          path="/"
-          element={<HomePage />}
+          path="/terms-and-conditions"
+          element={<TermsAndConditions />}
         />
 
-        {/* All Products Catalogue */}
         <Route
-          path="/products"
-          element={<ProductsPage />}
-        />
-
-        {/* Individual Product Details */}
-        <Route
-          path="/products/:slug"
-          element={<ProductDetails />}
-        />
-
-        {/* Blog Listing */}
-        <Route
-          path="/blog"
-          element={<Blog />}
-        />
-
-        {/* Individual Blog Article */}
-        <Route
-          path="/blog/:slug"
-          element={<BlogPost />}
+          path="/privacy-policy"
+          element={<PrivacyPolicy />}
         />
 
         {/* 404 Page */}

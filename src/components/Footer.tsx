@@ -8,6 +8,7 @@ import {
   Ship,
 } from "lucide-react";
 
+import { Link } from "react-router-dom";
 import { company } from "../data/company";
 
 const quickLinks = [
@@ -162,6 +163,17 @@ export default function Footer() {
           BACK TO TOP
           <ArrowUpRight size={15} />
         </a>
+      </div>
+
+      {/* Legal Links */}
+      <div className="footer-legal-links">
+        <Link to="/terms-and-conditions">
+          Terms & Conditions
+        </Link>
+
+        <Link to="/privacy-policy">
+          Privacy Policy
+        </Link>
       </div>
 
       {/* Developer credit */}
