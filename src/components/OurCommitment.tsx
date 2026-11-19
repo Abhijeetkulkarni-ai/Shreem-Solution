@@ -75,10 +75,10 @@ export default function OurCommitment() {
               className="founders-image"
               loading="lazy"
             />
-            <div className="founders-image-label">
+            {/* <div className="founders-image-label">
               <span>THE PEOPLE BEHIND SHREEM</span>
               <span>SHREEM / 001</span>
-            </div>
+            </div> */}
           </div>
 
           <div className="founders-content">
