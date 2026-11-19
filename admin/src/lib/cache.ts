@@ -29,6 +29,7 @@ export async function cachedFetch<T>(
   const storageKey = getStorageKey(key);
   const now = Date.now();
 
+  // 1. Check memory cache
   const memoryEntry = memoryCache.get(storageKey) as
     | CacheEntry<T>
     | undefined;
@@ -41,6 +42,7 @@ export async function cachedFetch<T>(
     memoryCache.delete(storageKey);
   }
 
+  // 2. Check localStorage
   try {
     const stored = localStorage.getItem(storageKey);
 
@@ -58,20 +60,22 @@ export async function cachedFetch<T>(
     // Continue without localStorage.
   }
 
+  // 3. Prevent duplicate requests
   const pending = pendingRequests.get(storageKey) as
     | Promise<T>
     | undefined;
 
-  if (pending) return pending;
+  if (pending) {
+    return pending;
+  }
 
   const version = getVersion(storageKey);
 
-  let request: Promise<T>;
-
-  request = (async () => {
-    try {
-      const data = await fetcher();
-
+  // 4. Fetch fresh data
+  const request: Promise<T> = Promise.resolve()
+    .then(() => fetcher())
+    .then((data) => {
+      // Cache only if request was not invalidated
       if (getVersion(storageKey) === version) {
         const entry: CacheEntry<T> = {
           data,
@@ -81,19 +85,23 @@ export async function cachedFetch<T>(
         memoryCache.set(storageKey, entry);
 
         try {
-          localStorage.setItem(storageKey, JSON.stringify(entry));
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(entry)
+          );
         } catch {
           // Memory cache still works.
         }
       }
 
       return data;
-    } finally {
+    })
+    .finally(() => {
+      // Only remove this request if it is still active
       if (pendingRequests.get(storageKey) === request) {
         pendingRequests.delete(storageKey);
       }
-    }
-  })();
+    });
 
   pendingRequests.set(storageKey, request);
 
@@ -106,6 +114,7 @@ export function invalidateCache(key: string) {
 
   bumpVersion(storageKey);
   memoryCache.delete(storageKey);
+  pendingRequests.delete(storageKey);
 
   try {
     localStorage.removeItem(storageKey);
@@ -128,6 +137,7 @@ export function invalidateCacheGroup(group: string) {
     if (key.startsWith(storagePrefix)) {
       bumpVersion(key);
       memoryCache.delete(key);
+      pendingRequests.delete(key);
     }
   }
 
@@ -157,6 +167,7 @@ export function clearCache() {
   }
 
   memoryCache.clear();
+  pendingRequests.clear();
 
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
