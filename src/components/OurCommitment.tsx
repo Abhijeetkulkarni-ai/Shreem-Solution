@@ -70,7 +70,7 @@ export default function OurCommitment() {
         <div className="founders-section">
           <div className="founders-image-wrap">
             <img
-              src="https://images.unsplash.com/photo-1629425733761-caae3b5f2e50?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D"
+              src="images/founder.png"
               alt="SHREEM SOLUTION leadership"
               className="founders-image"
               loading="lazy"

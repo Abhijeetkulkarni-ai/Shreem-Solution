@@ -2982,18 +2982,20 @@ a {
   width: 100%;
   min-height: 100vh;
   min-height: 100svh;
-  padding: 48px 3.5%;
+  padding: 55px 4%;
   display: flex;
   align-items: center;
   background: var(--background);
   color: var(--black);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .commitment-inner {
   width: 100%;
-  max-width: 1800px;
+  max-width: 1600px;
   margin: 0 auto;
+  min-width: 0;
 }
 
 /* TOPLINE */
@@ -3021,17 +3023,17 @@ a {
 
 .commitment-hero {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   align-items: end;
-  gap: 35px;
-  padding: 35px 0;
+  gap: clamp(25px, 4vw, 60px);
+  padding: clamp(35px, 4vw, 55px) 0;
 }
 
 .commitment-eyebrow {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   color: var(--blue);
   font-size: 9px;
   font-weight: 800;
@@ -3041,13 +3043,14 @@ a {
 .commitment-eyebrow span {
   width: 25px;
   height: 1px;
+  flex-shrink: 0;
   background: var(--blue);
 }
 
 .commitment-hero h2 {
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(48px, 5.5vw, 76px);
+  font-size: clamp(48px, 5.2vw, 78px);
   font-weight: 500;
   line-height: 0.98;
   letter-spacing: -3px;
@@ -3059,16 +3062,17 @@ a {
 }
 
 .commitment-intro {
-  max-width: 380px;
+  width: 100%;
+  max-width: 400px;
   justify-self: end;
   padding-bottom: 5px;
 }
 
 .commitment-intro p {
-  margin: 0 0 17px;
+  margin: 0 0 19px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.8;
+  line-height: 1.85;
 }
 
 .commitment-link {
@@ -3098,38 +3102,43 @@ a {
   transform: translate(3px, -3px);
 }
 
-/* FOUNDERS SECTION */
+/* =========================================
+   FOUNDERS SECTION
+========================================= */
 
 .founders-section {
   display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   align-items: center;
-  gap: clamp(25px, 4vw, 55px);
+  gap: clamp(25px, 3.5vw, 55px);
+  width: 100%;
   margin: 0 0 22px;
-  padding: 18px;
+  padding: clamp(16px, 2vw, 24px);
   background: #e9e2d6;
+  box-sizing: border-box;
 }
 
 .founders-image-wrap {
-  position: relative;
   width: 100%;
-  height: 380px;
+  height: clamp(340px, 28vw, 460px);
+  min-width: 0;
   overflow: hidden;
-  background: #d4cbbd;
+  background: #fff;
 }
+
 
 .founders-image {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 35%;
-  transition: transform 0.6s ease;
+  object-position: center top;
+  
 }
-
+/* 
 .founders-image-wrap:hover .founders-image {
   transform: scale(1.04);
-}
+} */
 
 .founders-image-label {
   position: absolute;
@@ -3138,6 +3147,7 @@ a {
   bottom: 0;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 10px;
   padding: 35px 16px 14px;
   background: linear-gradient(
@@ -3151,13 +3161,17 @@ a {
 }
 
 .founders-content {
-  max-width: 540px;
+  width: 100%;
+  max-width: 620px;
+  min-width: 0;
   padding: 12px 0;
+  box-sizing: border-box;
 }
 
 .founders-eyebrow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   margin-bottom: 15px;
   color: var(--blue);
@@ -3169,15 +3183,16 @@ a {
 .founders-eyebrow span {
   width: 22px;
   height: 1px;
+  flex-shrink: 0;
   background: var(--blue);
 }
 
 .founders-content h3 {
   margin: 0;
   font-family: var(--serif);
-  font-size: clamp(30px, 3vw, 43px);
+  font-size: clamp(30px, 2.8vw, 46px);
   font-weight: 500;
-  line-height: 1.04;
+  line-height: 1.06;
   letter-spacing: -1.3px;
 }
 
@@ -3187,8 +3202,8 @@ a {
 }
 
 .founders-content > p {
-  max-width: 460px;
-  margin: 16px 0 20px;
+  max-width: 480px;
+  margin: 17px 0 22px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.9;
@@ -3221,27 +3236,30 @@ a {
   transform: translate(3px, -3px);
 }
 
-/* COMMITMENT CARDS */
+/* =========================================
+   COMMITMENT CARDS
+========================================= */
 
 .commitment-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 11px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 22px;
 }
 
 .commitment-card {
   min-width: 0;
-  min-height: 170px;
+  min-height: 175px;
   display: flex;
   flex-direction: column;
-  padding: 17px;
+  padding: 18px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.25);
   transition:
     background 0.3s ease,
     border-color 0.3s ease,
     transform 0.3s ease;
+  box-sizing: border-box;
 }
 
 .commitment-card:hover {
@@ -3254,6 +3272,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 19px;
 }
 
@@ -3266,6 +3285,7 @@ a {
 
 .commitment-card-top svg {
   color: var(--blue);
+  flex-shrink: 0;
   transition: transform 0.3s ease;
 }
 
@@ -3276,7 +3296,7 @@ a {
 .commitment-card-content h3 {
   margin: 0 0 8px;
   font-family: var(--serif);
-  font-size: clamp(16px, 1.45vw, 21px);
+  font-size: clamp(16px, 1.35vw, 21px);
   font-weight: 500;
   line-height: 1.2;
 }
@@ -3285,7 +3305,7 @@ a {
   margin: 0;
   color: var(--muted);
   font-size: 10px;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 .commitment-card-bottom {
@@ -3306,6 +3326,7 @@ a {
   height: 27px;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   color: var(--blue);
@@ -3327,19 +3348,38 @@ a {
   padding-bottom: 0;
 }
 
-/* LARGE DESKTOP */
+/* =========================================
+   LARGE DESKTOP
+========================================= */
 
 @media (min-width: 1500px) {
+  .commitment-section {
+    padding: 65px 5%;
+  }
+
   .commitment-inner {
-    max-width: 1800px;
+    max-width: 1700px;
+  }
+
+  .commitment-hero h2 {
+    font-size: clamp(76px, 5vw, 90px);
+  }
+
+  .founders-section {
+    gap: 55px;
+    padding: 26px;
   }
 
   .founders-image-wrap {
     height: 440px;
   }
 
-  .founders-section {
-    padding: 22px;
+  .founders-content {
+    max-width: 680px;
+  }
+
+  .founders-content h3 {
+    font-size: 48px;
   }
 
   .commitment-card {
@@ -3348,7 +3388,41 @@ a {
   }
 }
 
-/* TABLET */
+/* =========================================
+   LAPTOP / SMALL DESKTOP
+========================================= */
+
+@media (max-width: 1200px) {
+  .commitment-section {
+    padding: 50px 3%;
+  }
+
+  .commitment-hero {
+    gap: 25px;
+  }
+
+  .founders-section {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 25px;
+    padding: 18px;
+  }
+
+  .founders-image-wrap {
+    height: 330px;
+  }
+
+  .founders-content h3 {
+    font-size: clamp(28px, 3vw, 38px);
+  }
+
+  .commitment-card {
+    padding: 15px;
+  }
+}
+
+/* =========================================
+   TABLET
+========================================= */
 
 @media (max-width: 1000px) {
   .commitment-section {
@@ -3358,7 +3432,7 @@ a {
 
   .commitment-hero {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 20px;
     padding: 35px 0;
   }
 
@@ -3372,13 +3446,13 @@ a {
   }
 
   .founders-section {
-    grid-template-columns: 0.9fr 1.1fr;
-    gap: 22px;
-    padding: 18px;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 20px;
+    padding: 16px;
   }
 
   .founders-image-wrap {
-    height: 340px;
+    height: 320px;
   }
 
   .founders-content h3 {
@@ -3394,7 +3468,9 @@ a {
   }
 }
 
-/* MOBILE */
+/* =========================================
+   MOBILE
+========================================= */
 
 @media (max-width: 650px) {
   .commitment-section {
@@ -3443,6 +3519,7 @@ a {
   }
 
   .founders-content {
+    max-width: 100%;
     padding: 5px 3px 10px;
   }
 
@@ -3483,7 +3560,9 @@ a {
   }
 }
 
-/* SMALL MOBILE */
+/* =========================================
+   SMALL MOBILE
+========================================= */
 
 @media (max-width: 390px) {
   .commitment-section {
@@ -3521,7 +3600,9 @@ a {
   }
 }
 
-/* REDUCED MOTION */
+/* =========================================
+   REDUCED MOTION
+========================================= */
 
 @media (prefers-reduced-motion: reduce) {
   .commitment-section *,
@@ -3532,6 +3613,7 @@ a {
     scroll-behavior: auto !important;
   }
 }
+
 
 
 /* =========================================

@@ -401,7 +401,7 @@ export default function Blog() {
             </h2>
           </div>
 
-          <Link to="/contact" className="blog-cta-link">
+          <Link to="#contact" className="blog-cta-link">
             Talk to our team <ArrowUpRight size={19} />
           </Link>
         </div>
